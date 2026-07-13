@@ -8,7 +8,7 @@ Last updated: 2026-07-13.
 - Renamed integration directory and domain from `ezviz_cloud` to `ezviz_plus`.
 - Updated manifest, HACS metadata, code references, tests, translations, README,
   API routes, and service selectors for the new domain.
-- Set product name to `EZVIZ Cloud Plus` and version to `0.1.0`.
+- Set product name to `EZVIZ Cloud Plus` and version to `0.2.0`.
 - Pinned the manifest to the `adirgan/pyEzvizApi` fork commit documented in
   [ARCHITECTURE.md](ARCHITECTURE.md).
 - Added normalized battery detail/status/source helpers.
@@ -127,7 +127,7 @@ host returned in `token["api_url"]`, with the selected host as fallback.
 3. Visually confirm the already functional cloud live stream in Lovelace.
 4. Run CI, HACS, and hassfest checks after the pending changes are committed and
    pushed.
-5. Create a `v0.1.0` release after the checks pass.
+5. Create a `v0.2.0` release using `CHANGELOG.md` after the checks pass.
 
 ## Working-tree status
 

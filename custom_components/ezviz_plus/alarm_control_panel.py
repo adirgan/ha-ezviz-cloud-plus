@@ -7,7 +7,7 @@ from datetime import timedelta
 import logging
 
 from pyezvizapi import PyEzvizError
-from pyezvizapi.constants import DefenseModeType
+from pyezvizapi.constants import DefenseModeType, SupportExt
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -23,6 +23,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DATA_COORDINATOR, DOMAIN, MANUFACTURER
 from .coordinator import EzvizDataUpdateCoordinator
+from .entity import EzvizEntity
+from .utility import support_ext_has
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,9 +66,64 @@ async def async_setup_entry(
         manufacturer=MANUFACTURER,
     )
 
-    async_add_entities(
-        [EzvizAlarm(coordinator, entry.entry_id, device_info, ALARM_TYPE)]
+    camera_alarms = (
+        EzvizCameraAlarm(coordinator, serial)
+        for serial, camera_data in coordinator.data.items()
+        if support_ext_has(camera_data, str(SupportExt.SupportDefence.value))
     )
+    async_add_entities(
+        [
+            EzvizAlarm(coordinator, entry.entry_id, device_info, ALARM_TYPE),
+            *camera_alarms,
+        ]
+    )
+
+
+class EzvizCameraAlarm(EzvizEntity, AlarmControlPanelEntity):
+    """Representation of an individual EZVIZ camera defence state."""
+
+    _attr_code_arm_required = False
+    _attr_code_disarm_required = False
+    _attr_name = None
+    _attr_supported_features = AlarmControlPanelEntityFeature.ARM_AWAY
+    _attr_translation_key = "camera_alarm"
+
+    def __init__(
+        self, coordinator: EzvizDataUpdateCoordinator, serial: str
+    ) -> None:
+        """Initialize the individual camera alarm panel."""
+        super().__init__(coordinator, serial)
+        self._attr_unique_id = f"{serial}-camera_alarm"
+
+    @property
+    def alarm_state(self) -> AlarmControlPanelState:
+        """Return the current camera defence state."""
+        if self.data.get("alarm_notify"):
+            return AlarmControlPanelState.ARMED_AWAY
+        return AlarmControlPanelState.DISARMED
+
+    async def async_alarm_arm_away(self, code: str | None = None) -> None:
+        """Arm motion detection for this camera."""
+        await self._async_set_camera_defence(True)
+
+    async def async_alarm_disarm(self, code: str | None = None) -> None:
+        """Disarm motion detection for this camera."""
+        await self._async_set_camera_defence(False)
+
+    async def _async_set_camera_defence(self, enable: bool) -> None:
+        """Set and publish the individual camera defence state."""
+        try:
+            await self.hass.async_add_executor_job(
+                self.coordinator.ezviz_client.set_camera_defence,
+                self._serial,
+                int(enable),
+            )
+        except PyEzvizError as error:
+            action = "arm" if enable else "disarm"
+            raise HomeAssistantError(f"Unable to {action} camera") from error
+
+        self.data["alarm_notify"] = enable
+        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
 
 
 class EzvizAlarm(AlarmControlPanelEntity):

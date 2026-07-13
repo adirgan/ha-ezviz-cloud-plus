@@ -1,5 +1,10 @@
 {
   "entity": {
+    "alarm_control_panel": {
+      "camera_alarm": {
+        "default": "mdi:shield-home"
+      }
+    },
     "button": {
       "ptz_up": {
         "default": "mdi:pan"

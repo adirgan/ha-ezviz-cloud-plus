@@ -169,6 +169,11 @@
     }
   },
   "entity": {
+    "alarm_control_panel": {
+      "camera_alarm": {
+        "name": "Alarm"
+      }
+    },
     "select": {
       "alarm_sound_mode": {
         "name": "Warning sound",
