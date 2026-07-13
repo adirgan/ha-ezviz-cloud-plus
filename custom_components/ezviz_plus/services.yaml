@@ -1,5 +1,5 @@
 wake_device:
   target:
     entity:
-      integration: ezviz_cloud
+      integration: ezviz_plus
       domain: camera

@@ -51,6 +51,54 @@ def coerce_bool(value: Any) -> bool | None:
     return None
 
 
+def battery_details(camera_data: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the first battery detail reported by the power manager."""
+    details = first_nested(
+        camera_data,
+        ("FEATURE_INFO", WILDCARD_STEP, "Video", "PowerMgr", "BatteryDetails"),
+    )
+    details = decode_json(details)
+    if isinstance(details, list):
+        return next((dict(item) for item in details if isinstance(item, Mapping)), None)
+    if isinstance(details, Mapping):
+        return dict(details)
+    return None
+
+
+def battery_charge_status(camera_data: dict[str, Any]) -> int | None:
+    """Return the normalized battery state code reported by EZVIZ."""
+    if (details := battery_details(camera_data)) and (
+        status := coerce_int(details.get("status"))
+    ) is not None:
+        return status
+    return coerce_int((camera_data.get("optionals") or {}).get("powerStatus"))
+
+
+def battery_charge_state(camera_data: dict[str, Any]) -> str | None:
+    """Return the Home Assistant-facing battery charge state."""
+    return {
+        0: "not_charging",
+        1: "charging",
+        2: "full",
+        3: "no_battery",
+        4: "fault",
+    }.get(battery_charge_status(camera_data))
+
+
+def battery_is_charging(camera_data: dict[str, Any]) -> bool | None:
+    """Return whether the battery is actively charging."""
+    status = battery_charge_status(camera_data)
+    return None if status is None else status == 1
+
+
+def battery_charging_source(camera_data: dict[str, Any]) -> str | None:
+    """Return the reported battery charging source."""
+    details = battery_details(camera_data)
+    if details is None:
+        return None
+    return {0: "power_adapter", 1: "solar"}.get(coerce_int(details.get("chargingType")))
+
+
 def _wifi_section(camera_data: dict[str, Any]) -> dict[str, Any] | None:
     """Return the WIFI sub-mapping when present."""
     wifi_data = camera_data.get("WIFI")

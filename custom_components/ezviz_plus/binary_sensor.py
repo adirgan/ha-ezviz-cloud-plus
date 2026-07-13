@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from pyezvizapi.constants import SupportExt
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -20,7 +22,7 @@ from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import EzvizDataUpdateCoordinator
 from .entity import EzvizEntity
 from .migration import migrate_unique_ids_with_coordinator
-from .utility import passes_description_gates
+from .utility import battery_is_charging, passes_description_gates
 
 PARALLEL_UPDATES = 1
 
@@ -29,10 +31,11 @@ PARALLEL_UPDATES = 1
 class EzvizBinarySensorEntityDescription(BinarySensorEntityDescription):
     """EZVIZ binary sensor description with value, capability & device-category gating."""
 
-    value_fn: Callable[[dict[str, Any]], bool]
+    value_fn: Callable[[dict[str, Any]], bool | None]
     supported_ext_key: str | None = None
     supported_ext_value: list[str] | None = None
     required_device_categories: tuple[str, ...] | None = None
+    is_supported_fn: Callable[[dict[str, Any]], bool] | None = None
 
 
 def _is_desc_supported(
@@ -46,7 +49,7 @@ def _is_desc_supported(
         supported_ext_keys=desc.supported_ext_key,
         supported_ext_values=desc.supported_ext_value,
         required_device_categories=desc.required_device_categories,
-        predicate=None,
+        predicate=desc.is_supported_fn,
     )
 
 
@@ -68,6 +71,16 @@ BINARY_SENSORS: tuple[EzvizBinarySensorEntityDescription, ...] = (
         entity_registry_enabled_default=False,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: bool(d.get("encrypted")),
+    ),
+    EzvizBinarySensorEntityDescription(
+        key="battery_charging",
+        translation_key="battery_charging",
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        supported_ext_key=str(SupportExt.SupportBatteryManage.value),
+        supported_ext_value=["1"],
+        value_fn=battery_is_charging,
+        is_supported_fn=lambda d: battery_is_charging(d) is not None,
     ),
 )
 
@@ -114,6 +127,6 @@ class EzvizBinarySensor(EzvizEntity, BinarySensorEntity):
         self._attr_unique_id = f"{serial}_{description.key}"
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         """Return the sensor state."""
         return self.entity_description.value_fn(self.data)

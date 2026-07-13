@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pyezvizapi.exceptions import EzvizAuthVerificationCode
 import pytest
 
-from config.custom_components.ezviz_cloud import config_flow
-from config.custom_components.ezviz_cloud.const import (
+from config.custom_components.ezviz_plus import config_flow
+from config.custom_components.ezviz_plus.const import (
     ATTR_TYPE_CLOUD,
     CONF_CAM_ENC_2FA_CODE,
     CONF_CAM_VERIFICATION_2FA_CODE,
@@ -49,7 +49,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from tests.common import MockConfigEntry
 
 pytestmark = pytest.mark.parametrize(
-    "ignore_translations_for_mock_domains", ["ezviz_cloud"]
+    "ignore_translations_for_mock_domains", ["ezviz_plus"]
 )
 
 
@@ -57,27 +57,27 @@ pytestmark = pytest.mark.parametrize(
 def mock_setup_entry() -> Generator[AsyncMock]:
     """Stop Home Assistant from setting up the integration during the flow."""
     with patch(
-        "config.custom_components.ezviz_cloud.async_setup_entry",
+        "config.custom_components.ezviz_plus.async_setup_entry",
         AsyncMock(return_value=True),
     ) as mock_setup:
         yield mock_setup
 
 
 @pytest.fixture(autouse=True)
-def register_ezviz_cloud_integration(hass: HomeAssistant) -> None:
+def register_ezviz_plus_integration(hass: HomeAssistant) -> None:
     """Register the real custom integration with the loader."""
-    base_path = Path("config/custom_components/ezviz_cloud")
+    base_path = Path("config/custom_components/ezviz_plus")
     manifest = json.loads((base_path / "manifest.json").read_text())
     integration = loader.Integration(
         hass,
-        "config.custom_components.ezviz_cloud",
+        "config.custom_components.ezviz_plus",
         base_path,
         manifest,
         set(os.listdir(base_path)),
     )
     hass.data[loader.DATA_INTEGRATIONS][DOMAIN] = integration
     hass.data[loader.DATA_COMPONENTS][DOMAIN] = import_module(
-        "config.custom_components.ezviz_cloud"
+        "config.custom_components.ezviz_plus"
     )
 
 
@@ -96,7 +96,7 @@ def mock_config_entries_setup(hass: HomeAssistant) -> Generator[AsyncMock]:
 def mock_ezviz_client() -> Generator[MagicMock]:
     """Patch the EzvizClient used by the config flow."""
     with patch(
-        "config.custom_components.ezviz_cloud.config_flow.EzvizClient",
+        "config.custom_components.ezviz_plus.config_flow.EzvizClient",
         autospec=True,
     ) as mock_client:
         instance = mock_client.return_value

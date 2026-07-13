@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from pyezvizapi.constants import SupportExt
 
@@ -23,6 +23,8 @@ from .coordinator import EzvizDataUpdateCoordinator
 from .entity import EzvizEntity
 from .migration import migrate_unique_ids_with_coordinator
 from .utility import (
+    battery_charge_state,
+    battery_charging_source,
     network_type_value,
     passes_description_gates,
     sd_card_capacity_gb,
@@ -99,20 +101,23 @@ SENSORS: tuple[EzvizSensorEntityDescription, ...] = (
         value_fn=sd_card_capacity_gb,
         is_supported_fn=lambda d: sd_card_capacity_gb(d) is not None,
     ),
-    # Battery charge state derived from optionals.powerStatus
     EzvizSensorEntityDescription(
         key="battery_charge_state",
         translation_key="battery_charge_state",
         entity_category=EntityCategory.DIAGNOSTIC,
         supported_ext_key=str(SupportExt.SupportBatteryManage.value),
         supported_ext_value=["1"],
-        value_fn=lambda d: {
-            0: "not_charging",
-            1: "charging",
-            2: "full",
-            3: "no_battery",
-            4: "fault",
-        }.get(cast(int, (d.get("optionals") or {}).get("powerStatus"))),
+        value_fn=battery_charge_state,
+        is_supported_fn=lambda d: battery_charge_state(d) is not None,
+    ),
+    EzvizSensorEntityDescription(
+        key="battery_charging_source",
+        translation_key="battery_charging_source",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        supported_ext_key=str(SupportExt.SupportBatteryManage.value),
+        supported_ext_value=["1"],
+        value_fn=battery_charging_source,
+        is_supported_fn=lambda d: battery_charging_source(d) is not None,
     ),
     EzvizSensorEntityDescription(
         key="alarm_sound_mod",

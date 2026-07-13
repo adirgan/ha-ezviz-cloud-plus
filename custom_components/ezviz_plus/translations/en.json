@@ -1,57 +1,57 @@
 {
-  "title": "EZVIZ Cloud",
+  "title": "EZVIZ Cloud Plus",
   "config": {
     "step": {
       "user": {
         "title": "Connect EZVIZ Cloud",
-        "description": "Sign in to your EZVIZ Cloud account and choose the API region. If you select Custom, enter the url (without https://).",
+        "description": "Sign in to your EZVIZ Cloud account and choose the API region. If you select Custom, enter the host (without https://).",
         "data": {
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]",
+          "username": "Username",
+          "password": "Password",
           "region": "Region",
-          "url": "[%key:common::config_flow::data::url%]",
-          "timeout": "[%key:common::config_flow::data::timeout%]"
+          "url": "Url",
+          "timeout": "Timeout"
         }
       },
       "user_mfa_confirm": {
         "title": "Two-factor verification required",
         "description": "Enter the SMS verification code sent by EZVIZ.",
         "data": {
-          "sms_code": "[%key:common::config_flow::data::code%]"
+          "sms_code": "Code"
         }
       },
       "reauth_confirm": {
-        "title": "[%key:common::config_flow::title::reauth%]",
+        "title": "Re-authenticate",
         "description": "Your session expired or became invalid. Enter your password to refresh tokens. You may be asked for an SMS code next.",
         "data": {
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
+          "username": "Username",
+          "password": "Password"
         }
       },
       "reauth_mfa": {
         "title": "Re-authenticate: SMS code",
         "description": "Enter the SMS verification code to finish re-authentication.",
         "data": {
-          "sms_code": "[%key:common::config_flow::data::code%]"
+          "sms_code": "Code"
         }
       }
     },
     "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
-      "invalid_host": "[%key:common::config_flow::error::invalid_host%]",
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_host": "Invalid host",
       "invalid_url": "Custom API host is invalid. Enter a hostname without https:// or trailing slash.",
       "mfa_required": "Multi-factor authentication required, please enter the code",
       "device_exception": "Device exception, couldn't fetch key",
       "verification_required": "Verification code required or invalid. Please try again.",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "unknown": "Unknown error"
     },
     "abort": {
-      "already_configured_account": "[%key:common::config_flow::abort::already_configured_account%]",
-      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
-      "ezviz_cloud_account_missing": "Ezviz cloud account missing. Please reconfigure Ezviz cloud account",
+      "already_configured_account": "Account already configured",
+      "reauth_successful": "Re-authentication successful",
+      "ezviz_plus_account_missing": "Ezviz cloud account missing. Please reconfigure",
       "no_cameras": "No cameras were found for this account.",
-      "unknown": "[%key:common::config_flow::error::unknown%]"
+      "unknown": "Unknown error"
     }
   },
   "options": {
@@ -68,7 +68,7 @@
         "title": "Cloud Settings",
         "description": "Set default options for the EZVIZ cloud account.",
         "data": {
-          "timeout": "[%key:common::config_flow::data::timeout%]"
+          "timeout": "Timeout"
         }
       },
       "camera": {
@@ -86,7 +86,7 @@
         "title": "Camera settings",
         "description": "Editing camera {serial} at {ip_address}. Set RTSP credentials for this camera. If you don't know them, choose \"fetch_my_key\" and provide one-time codes on the next step if prompted.",
         "data": {
-          "username": "[%key:common::config_flow::data::username%]",
+          "username": "Username",
           "password": "Verification code (older cams) or leave “fetch_my_key”",
           "enc_key": "Encryption key (newer cams) or leave “fetch_my_key”",
           "rtsp_uses_verification_code": "Use verification code for RTSP (instead of encryption key)",
@@ -98,17 +98,17 @@
         "title": "One-time codes",
         "description": "Enter one-time codes for {serial} at {ip_address} to fetch verification/encryption keys.",
         "data": {
-          "cam_verification_2fa_code": "[%key:common::config_flow::data::code%]",
-          "cam_encryption_2fa_code": "[%key:common::config_flow::data::code%]"
+          "cam_verification_2fa_code": "Code (for sticker/verification key)",
+          "cam_encryption_2fa_code": "Code (for encryption key)"
         }
       }
     },
     "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "cannot_connect": "Failed to connect",
       "device_exception": "Device exception, couldn't fetch key",
       "verification_required": "Verification code required or invalid. Please try again.",
-      "unknown": "[%key:common::config_flow::error::unknown%]",
-      "rtsp_auth_failed": "[%key:common::config_flow::error::rtsp_auth_failed%]"
+      "unknown": "Unknown error",
+      "rtsp_auth_failed": "Invalid authentication"
     }
   },
   "entity": {
@@ -210,7 +210,7 @@
         "name": "Night vision mode",
         "state": {
           "night_vision_b_w": "Black and white",
-          "night_vision_colour": "Colour",
+          "night_vision_colour": "Full color",
           "night_vision_smart": "Smart mode",
           "night_vision_super": "Super night view"
         }
@@ -286,11 +286,14 @@
       },
       "encrypted": {
         "name": "Encryption"
+      },
+      "battery_charging": {
+        "name": "Battery charging"
       }
     },
     "light": {
       "light": {
-        "name": "[%key:component::light::title%]"
+        "name": "Light"
       }
     },
     "number": {
@@ -331,6 +334,13 @@
           "full": "Charged",
           "no_battery": "No battery",
           "fault": "Battery fault"
+        }
+      },
+      "battery_charging_source": {
+        "name": "Charging source",
+        "state": {
+          "power_adapter": "Power adapter",
+          "solar": "Solar"
         }
       },
       "alarm_sound_mod": {
@@ -503,7 +513,7 @@
     },
     "siren": {
       "siren": {
-        "name": "[%key:component::siren::title%]"
+        "name": "Siren"
       }
     }
   },

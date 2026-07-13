@@ -49,8 +49,8 @@ jobs:
 
       - name: Install tooling + deps
         run: |
-          pip install ruff mypy pytest types-requests
-          pip install pyezvizapi  # your runtime dep
+          pip install homeassistant ruff mypy pytest types-requests
+          pip install "pyezvizapi @ git+https://github.com/adirgan/pyEzvizApi.git@a7710099624008e113269daed0f7f41e3d0b510e"
 
       - name: Ruff
         run: ruff check .
@@ -58,11 +58,5 @@ jobs:
       - name: mypy
         run: mypy --install-types --non-interactive .
 
-      - name: pytest (only if tests exist)
-        shell: bash
-        run: |
-          if compgen -G "tests/test_*.py" > /dev/null; then
-            pytest -q
-          else
-            echo "No tests found under tests/, skipping pytest."
-          fi
+      - name: Battery telemetry tests
+        run: pytest -q tests/components/ezviz_plus/test_battery.py

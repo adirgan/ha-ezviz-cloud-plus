@@ -127,3 +127,16 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Home Assistant development runtime
+_devconfig/custom_components/
+_devconfig/.HA_VERSION
+_devconfig/.ha_run.lock
+_devconfig/.storage/
+_devconfig/blueprints/
+_devconfig/deps/
+_devconfig/home-assistant.log*
+_devconfig/home-assistant_v2.db*
+_devconfig/secrets.yaml
+_devconfig/tts/
+_devconfig/www/

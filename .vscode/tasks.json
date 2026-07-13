@@ -10,7 +10,7 @@
     {
       "label": "HA: run dev instance",
       "type": "shell",
-      "command": ". .venv/bin/activate && hass -c ./_devconfig --debug",
+      "command": "mkdir -p ./_devconfig/custom_components && ln -sfn ../../custom_components/ezviz_plus ./_devconfig/custom_components/ezviz_plus && . .venv/bin/activate && hass -c ./_devconfig --debug",
       "options": {
         "env": { "PYTHONPATH": "${workspaceFolder}" }
       },
@@ -32,6 +32,12 @@
       "label": "Test: pytest",
       "type": "shell",
       "command": ". .venv/bin/activate && pytest",
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: battery telemetry",
+      "type": "shell",
+      "command": ". .venv/bin/activate && pytest -q tests/components/ezviz_plus/test_battery.py",
       "problemMatcher": []
     }
   ]

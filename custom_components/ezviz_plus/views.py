@@ -37,8 +37,8 @@ class ImageProxyView(HomeAssistantView):
     """View to proxy and decrypt Ezviz alarm images."""
 
     requires_auth = True
-    url = "/api/ezviz_cloud/image/{config_entry_id}/{serial}/{url}"
-    name = "api:ezviz_cloud_image"
+    url = "/api/ezviz_plus/image/{config_entry_id}/{serial}/{url}"
+    name = "api:ezviz_plus_image"
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the proxy view."""
@@ -86,7 +86,7 @@ class ImageProxyView(HomeAssistantView):
         # Security: never forward HA's incoming request headers (e.g., Authorization)
         # to third-party endpoints. Build a minimal, safe header set.
         headers = {
-            "User-Agent": "HomeAssistant/ezviz_cloud",
+            "User-Agent": "HomeAssistant/ezviz_plus",
             "Accept": "*/*",
         }
 

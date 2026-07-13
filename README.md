@@ -1,19 +1,28 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Donate](https://img.shields.io/badge/donate-Coffee-yellow.svg)](https://www.buymeacoffee.com/renierm)
 
-Updated Ezviz HA component making use of latest version of pyEzviz (API behind the integration). (**Basically Beta version of ha component with up to date changes)
-https://www.home-assistant.io/integrations/ezviz/
+# EZVIZ Cloud Plus
 
+Custom Home Assistant integration backed by
+[adirgan/pyEzvizApi](https://github.com/adirgan/pyEzvizApi). It exposes EZVIZ
+Cloud devices, MQTT events, RTSP configuration, and extended battery telemetry.
 
-# EZVIZ account setup (doesn't require IE):
+## Battery telemetry
+
+Supported battery cameras expose battery percentage, charge state, active
+charging, and charging source. Charge data is read from
+`FEATURE_INFO.Video.PowerMgr.BatteryDetails` with a compatibility fallback for
+older payloads.
+
+## EZVIZ account setup
+
 ---
 
-1) Register your account here: https://i.ezvizlife.com/user/userAction!goRegister.action
-2) Take note of your **User Name**, you will need it to the EZVIZ Integration setup
-3) Login here: https://euauth.ezvizlife.com/signIn
-4) Logged in access the user account here: https://i.ezvizlife.com/user/userAction!displayUserInfo.action (to add/manage cameras) or use the EZVIZ App
+1. Register your account here: https://i.ezvizlife.com/user/userAction!goRegister.action
+2. Take note of your **User Name**, you will need it to the EZVIZ Integration setup
+3. Login here: https://euauth.ezvizlife.com/signIn
+4. Logged in access the user account here: https://i.ezvizlife.com/user/userAction!displayUserInfo.action (to add/manage cameras) or use the EZVIZ App
 
-# Ezviz(Beta) — Configuration & Options
+## Configuration and options
 
 This integration logs into **EZVIZ Cloud**, subscribes to **MQTT** events, and lets you configure **per-camera RTSP** settings with a simple UI.
 
@@ -23,16 +32,16 @@ This integration logs into **EZVIZ Cloud**, subscribes to **MQTT** events, and l
 
 ## Add the integration
 
-1. **Settings → Devices & Services → Add Integration → _Ezviz(Beta)_**  
-2. Sign in with your EZVIZ account.  
-3. If EZVIZ requests a one-time 2FA, follow the prompt.  
+1. **Settings → Devices & Services → Add Integration → _EZVIZ Cloud Plus_**
+2. Sign in with your EZVIZ account.
+3. If EZVIZ requests a one-time 2FA, follow the prompt.
 4. On success, the cloud tokens are stored; entities and MQTT will load.
 
 ---
 
 ## Configure per-camera options
 
-Open **Settings → Devices & Services → Ezviz(Beta) → Configure**, then select a camera to **Edit**.
+Open **Settings → Devices & Services → EZVIZ Cloud Plus → Configure**, then select a camera to **Edit**.
 
 You’ll see the following fields:
 
@@ -49,19 +58,20 @@ You’ll see the following fields:
   - `/Streaming/Channels/102` → sub-stream (lower bitrate; default)
   - NVRs typically follow the same pattern per channel.
 
-- **Use Verification Code (VC) for RTSP** *(toggle)*  
+- **Use Verification Code (VC) for RTSP** _(toggle)_
   Switch RTSP authentication between:
-  - **VC mode** (uses the **Verification Code**)  
+  - **VC mode** (uses the **Verification Code**)
   - **ENC mode** (uses the **Encryption Key**)
 
 - **Verification Code**  
   The **sticker/verification code** printed on the camera/NVR. Present on all devices.
 
 - **Encryption Key**  
-  The device **Encryption Key** (used when encryption is **enabled** on the device).  
+  The device **Encryption Key** (used when encryption is **enabled** on the device).
+
   > Encryption can be **disabled** on the device. If disabled, you can leave this as “fetch_my_key” or blank and use VC mode instead.
 
-- **Validate credentials now** *(checkbox)*  
+- **Validate credentials now** _(checkbox)_
   One-time RTSP validation. When checked, the form will **test** the RTSP credentials before saving.  
   This does **not** store anything by itself; it only validates the values you entered.
 
@@ -110,8 +120,6 @@ If validation fails (auth or connectivity), the form reopens with the **best-kno
 **Typical sub-stream RTSP URL (ENC mode):**
 `rtsp://<username>:<encryption_key>@<camera-ip>:554/Streaming/Channels/102`
 
-
-
 > Only the **path** (`/Streaming/Channels/101` or `/Streaming/Channels/102`) is configured in Options; the integration composes the full URL for you.
 
 ---
@@ -140,4 +148,3 @@ If validation fails (auth or connectivity), the form reopens with the **best-kno
 - Entity identifiers are preserved.
 
 ---
-

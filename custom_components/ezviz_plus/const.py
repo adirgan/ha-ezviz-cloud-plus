@@ -2,7 +2,7 @@
 
 from typing import Final
 
-DOMAIN: Final = "ezviz_cloud"
+DOMAIN: Final = "ezviz_plus"
 MANUFACTURER: Final = "EZVIZ"
 
 # ---------------------------
