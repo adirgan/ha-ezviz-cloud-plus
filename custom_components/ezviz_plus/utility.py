@@ -76,13 +76,16 @@ def battery_charge_status(camera_data: dict[str, Any]) -> int | None:
 
 def battery_charge_state(camera_data: dict[str, Any]) -> str | None:
     """Return the Home Assistant-facing battery charge state."""
+    status = battery_charge_status(camera_data)
+    if status is None:
+        return None
     return {
         0: "not_charging",
         1: "charging",
         2: "full",
         3: "no_battery",
         4: "fault",
-    }.get(battery_charge_status(camera_data))
+    }.get(status)
 
 
 def battery_is_charging(camera_data: dict[str, Any]) -> bool | None:
@@ -96,7 +99,10 @@ def battery_charging_source(camera_data: dict[str, Any]) -> str | None:
     details = battery_details(camera_data)
     if details is None:
         return None
-    return {0: "power_adapter", 1: "solar"}.get(coerce_int(details.get("chargingType")))
+    charging_type = coerce_int(details.get("chargingType"))
+    if charging_type is None:
+        return None
+    return {0: "power_adapter", 1: "solar"}.get(charging_type)
 
 
 def _wifi_section(camera_data: dict[str, Any]) -> dict[str, Any] | None:

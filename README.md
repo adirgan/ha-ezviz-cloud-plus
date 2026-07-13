@@ -6,6 +6,29 @@ Custom Home Assistant integration backed by
 [adirgan/pyEzvizApi](https://github.com/adirgan/pyEzvizApi). It exposes EZVIZ
 Cloud devices, MQTT events, RTSP configuration, and extended battery telemetry.
 
+> [!IMPORTANT]
+> This project is under active development and does not have a stable release
+> yet. Install it from the `main` branch only for testing.
+
+## Install with HACS
+
+This repository is not yet included in the default HACS catalog. Add it as a
+custom repository:
+
+1. Open **HACS** in Home Assistant.
+2. Open the three-dot menu in the top-right corner and select
+   **Custom repositories**.
+3. Enter `https://github.com/adirgan/ha-ezviz-cloud-plus` as the repository URL.
+4. Select **Integration** as the category and click **Add**.
+5. Open **EZVIZ Cloud Plus** in HACS and select **Download**.
+6. Select the `main` version when prompted, then complete the download.
+7. Restart Home Assistant.
+8. Open **Settings -> Devices & services -> Add integration**, search for
+   **EZVIZ Cloud Plus**, and complete the EZVIZ login flow.
+
+HACS installs the integration under `custom_components/ezviz_plus`. A Home
+Assistant restart is required after the first installation and after updates.
+
 ## Battery telemetry
 
 Supported battery cameras expose battery percentage, charge state, active

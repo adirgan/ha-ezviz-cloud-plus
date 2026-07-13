@@ -56,7 +56,7 @@ jobs:
         run: ruff check .
 
       - name: mypy
-        run: mypy --install-types --non-interactive .
+        run: mypy --install-types --non-interactive
 
       - name: Battery telemetry tests
         run: pytest -q tests/components/ezviz_plus/test_battery.py
