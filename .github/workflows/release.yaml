@@ -4,45 +4,40 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing version tag to release (for example, v0.2.0)
-        required: true
-        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yaml
+
+  hacs:
+    uses: ./.github/workflows/HACS.yaml
+
+  hassfest:
+    uses: ./.github/workflows/hassfest.yaml
+
   release:
+    needs: [ci, hacs, hassfest]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve tag
-        id: release
+      - name: Validate tag
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_TAG: ${{ inputs.tag }}
-          PUSH_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            tag="$DISPATCH_TAG"
-          else
-            tag="$PUSH_TAG"
-          fi
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release tag: $tag" >&2
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
             exit 1
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.release.outputs.tag }}
 
       - name: Verify manifest version
         env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           manifest_version="$(jq -r '.version' custom_components/ezviz_plus/manifest.json)"
           if [[ "v$manifest_version" != "$RELEASE_TAG" ]]; then
@@ -68,7 +63,7 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" ezviz_plus.zip \
             --title "EZVIZ Cloud Plus ${RELEASE_TAG#v}" \

@@ -2,6 +2,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened, ready_for_review ]
@@ -14,7 +15,6 @@ on:
       - "!docs/**"
   push:
     branches: [ main ]         # run after merge
-    tags: [ "v*" ]             # run on releases
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -22,7 +22,7 @@ on:
 
 # Kill older runs for the same ref (stops “double running” on rapid pushes)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

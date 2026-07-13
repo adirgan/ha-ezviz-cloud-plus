@@ -1,6 +1,7 @@
 name: HACS Action
 
 on:
+  workflow_call:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -12,7 +13,6 @@ on:
       - "!docs/**"
   push:
     branches: [ main ]
-    tags: [ "v*" ]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -21,7 +21,7 @@ on:
     - cron: "0 0 * * *"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: hacs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
