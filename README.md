@@ -1,9 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="custom_components/ezviz_plus/brand/dark_logo@2x.png">
-    <source media="(prefers-color-scheme: light)" srcset="custom_components/ezviz_plus/brand/logo@2x.png">
-    <img alt="EZVIZ Cloud Plus" src="custom_components/ezviz_plus/brand/logo@2x.png" width="320">
-  </picture>
+  <img alt="EZVIZ Cloud Plus" src="https://raw.githubusercontent.com/adirgan/ha-ezviz-cloud-plus/main/custom_components/ezviz_plus/brand/logo@2x.png" width="320">
 </p>
 
 <h1 align="center">EZVIZ Cloud Plus</h1>
@@ -22,8 +18,8 @@ coexist with the official `ezviz` integration and other custom EZVIZ
 integrations.
 
 > [!IMPORTANT]
-> This project is under active development and does not have a stable release
-> yet. Install it from the `main` branch only for testing.
+> This project is under active development. Install the latest published
+> release through HACS; the `main` branch may contain unreleased changes.
 
 Current integration version: **0.2.0**. The validated minimum Home Assistant
 version is **2026.7.2**. See the [changelog](CHANGELOG.md) for release details.

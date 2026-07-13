@@ -1,6 +1,9 @@
 {
   "name": "EZVIZ Cloud Plus",
   "render_readme": true,
+  "zip_release": true,
+  "filename": "ezviz_plus.zip",
+  "hide_default_branch": true,
   "homeassistant": "2026.7.2",
   "hacs": "1.6.0"
 }
