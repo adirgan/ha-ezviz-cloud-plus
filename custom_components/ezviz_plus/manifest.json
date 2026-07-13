@@ -11,5 +11,5 @@
   "requirements": [
     "pyezvizapi@git+https://github.com/adirgan/pyEzvizApi.git@a7710099624008e113269daed0f7f41e3d0b510e"
   ],
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

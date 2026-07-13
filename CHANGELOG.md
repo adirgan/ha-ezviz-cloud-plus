@@ -7,6 +7,16 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-13
+
+### Changed
+
+- Reorganized the HACS README into compact feature, configuration, RTSP, and
+  troubleshooting tables with a consistent heading hierarchy.
+- Replaced HACS-sensitive HTML branding markup with standard GitHub Markdown.
+- Clarified release-based installation, account setup, per-camera options, and
+  VC/ENC authentication.
+
 ## [0.2.0] - 2026-07-13
 
 ### Added
@@ -53,6 +63,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Separate `ezviz_plus` domain, config-entry migration, cloud polling, MQTT
   events, local RTSP configuration, and capability-gated camera entities.
 
-[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/bb8ccd7...v0.2.0
 [0.1.0]: https://github.com/adirgan/ha-ezviz-cloud-plus/tree/bb8ccd7
