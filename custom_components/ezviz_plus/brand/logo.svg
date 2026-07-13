@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 256" role="img" aria-labelledby="title desc">
+  <title id="title">EZVIZ Cloud Plus logo</title>
+  <desc id="desc">EZVIZ Plus Cloud wordmark with a camera aperture and cloud.</desc>
+  <defs>
+    <linearGradient id="lens" x1="32" y1="44" x2="190" y2="208" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00b8d9"/>
+      <stop offset="1" stop-color="#0078d4"/>
+    </linearGradient>
+  </defs>
+  <circle cx="112" cy="124" r="78" fill="#102a43"/>
+  <circle cx="112" cy="124" r="56" fill="url(#lens)"/>
+  <path d="M112 68a56 56 0 0 1 41 18l-41 38z" fill="#4dd0e1"/>
+  <path d="M153 86a56 56 0 0 1 12 47l-53-9z" fill="#00a4c7"/>
+  <path d="M165 133a56 56 0 0 1-30 41l-23-50z" fill="#0085c8"/>
+  <path d="M135 174a56 56 0 0 1-49-4l26-46z" fill="#006fb9"/>
+  <path d="M86 170a56 56 0 0 1-29-41l55-5z" fill="#18a7d1"/>
+  <path d="M57 129a56 56 0 0 1 19-43l36 38z" fill="#2bc1d6"/>
+  <circle cx="112" cy="124" r="23" fill="#e8fbff"/>
+  <circle cx="112" cy="124" r="12" fill="#102a43"/>
+  <path d="M145 208h44c16 0 28-10 28-24 0-13-9-23-22-25-4-16-18-26-35-26-20 0-35 14-38 32-11 3-18 11-18 22 0 12 9 21 21 21h20z" fill="#f7fbfc" stroke="#102a43" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M160 157v28m-14-14h28" fill="none" stroke="#00a7c4" stroke-width="9" stroke-linecap="round"/>
+  <text x="225" y="120" fill="#102a43" font-family="Avenir Next, Montserrat, sans-serif" font-size="61" font-weight="800" letter-spacing="0">EZVIZ+</text>
+  <text x="228" y="166" fill="#007f9e" font-family="Avenir Next, Montserrat, sans-serif" font-size="31" font-weight="600" letter-spacing="0">CLOUD</text>
+</svg>

@@ -47,7 +47,7 @@ from .const import (
 )
 from .coordinator import EzvizDataUpdateCoordinator
 from .mqtt import EzvizMqttHandler
-from .views import ImageProxyView
+from .views import CloudStreamView, ImageProxyView, SdPlaybackView
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,10 +144,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     remove_shutdown = hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _shutdown)
     entry.async_on_unload(remove_shutdown)
 
-    # Register HTTP view for image proxy/decryption once per instance
+    # Register HTTP views once per instance
     domain_data = hass.data.setdefault(DOMAIN, {})
     if not domain_data.get("_http_view_registered"):
         hass.http.register_view(ImageProxyView(hass))
+        hass.http.register_view(CloudStreamView(hass))
+        hass.http.register_view(SdPlaybackView(hass))
         domain_data["_http_view_registered"] = True
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

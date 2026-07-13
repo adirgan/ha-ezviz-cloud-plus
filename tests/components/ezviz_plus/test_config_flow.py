@@ -20,6 +20,9 @@ from config.custom_components.ezviz_plus.const import (
     CONF_CAM_VERIFICATION_2FA_CODE,
     CONF_ENC_KEY,
     CONF_FFMPEG_ARGUMENTS,
+    CONF_IMAGE_SOURCE,
+    CONF_LIVE_STREAM_SOURCE,
+    CONF_RECORDINGS_SOURCE,
     CONF_REGION,
     CONF_RF_SESSION_ID,
     CONF_RTSP_USES_VERIFICATION_CODE,
@@ -30,6 +33,8 @@ from config.custom_components.ezviz_plus.const import (
     DEFAULT_FFMPEG_ARGUMENTS,
     DEFAULT_TIMEOUT,
     DOMAIN,
+    MEDIA_SOURCE_CLOUD,
+    MEDIA_SOURCE_LOCAL,
     OPTIONS_KEY_CAMERAS,
     REGION_CUSTOM,
     REGION_EU,
@@ -104,6 +109,7 @@ def mock_ezviz_client() -> Generator[MagicMock]:
             CONF_SESSION_ID: "sess-token",
             CONF_RF_SESSION_ID: "rf-token",
             "username": "cloud-user-id",
+            "api_url": "apiisa.ezvizlife.com",
         }
         yield mock_client
 
@@ -156,7 +162,7 @@ async def test_user_flow_success(hass: HomeAssistant, mock_ezviz_client: MagicMo
         CONF_TYPE: ATTR_TYPE_CLOUD,
         CONF_SESSION_ID: "sess-token",
         CONF_RF_SESSION_ID: "rf-token",
-        CONF_URL: REGION_URLS[REGION_EU],
+        CONF_URL: "apiisa.ezvizlife.com",
         CONF_USER_ID: "cloud-user-id",
     }
     assert result["result"].unique_id == "user@example.com"
@@ -205,6 +211,7 @@ async def test_user_flow_with_mfa(
             CONF_SESSION_ID: "sess-token",
             CONF_RF_SESSION_ID: "rf-token",
             "username": "cloud-user-id",
+            "api_url": "apiisa.ezvizlife.com",
         },
     ]
 
@@ -229,6 +236,7 @@ async def test_user_flow_with_mfa(
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SESSION_ID] == "sess-token"
+    assert result["data"][CONF_URL] == "apiisa.ezvizlife.com"
     assert result["result"].options[CONF_TIMEOUT] == DEFAULT_TIMEOUT
     assert mock_ezviz_client.call_count == 2
 
@@ -244,6 +252,7 @@ async def test_reauth_flow_updates_tokens(
         CONF_SESSION_ID: "new-session",
         CONF_RF_SESSION_ID: "new-rf-session",
         "username": "cloud-user-id",
+        "api_url": "apiisa.ezvizlife.com",
     }
 
     result = await entry.start_reauth_flow(hass)
@@ -259,6 +268,7 @@ async def test_reauth_flow_updates_tokens(
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_SESSION_ID] == "new-session"
     assert entry.data[CONF_RF_SESSION_ID] == "new-rf-session"
+    assert entry.data[CONF_URL] == "apiisa.ezvizlife.com"
 
     mock_ezviz_client.assert_called_once_with(
         account=entry.unique_id,
@@ -281,6 +291,7 @@ async def test_reauth_flow_with_mfa(
             CONF_SESSION_ID: "reauth-session",
             CONF_RF_SESSION_ID: "reauth-rf",
             "username": "cloud-user-id",
+            "api_url": "apiisa.ezvizlife.com",
         },
     ]
 
@@ -304,6 +315,7 @@ async def test_reauth_flow_with_mfa(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_SESSION_ID] == "reauth-session"
+    assert entry.data[CONF_URL] == "apiisa.ezvizlife.com"
     assert mock_ezviz_client.call_count == 2
 
 
@@ -344,6 +356,52 @@ async def test_options_flow_camera_select_no_devices(hass: HomeAssistant) -> Non
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "no_cameras"
+
+
+async def test_options_flow_saves_per_camera_media_sources(
+    hass: HomeAssistant,
+) -> None:
+    """Persist independent image, live stream, and recording transports."""
+    entry = _mock_cloud_entry()
+    entry.options = {
+        **entry.options,
+        OPTIONS_KEY_CAMERAS: {"C12345": {CONF_ENC_KEY: "existing-key"}},
+    }
+    entry.add_to_hass(hass)
+    _attach_coordinator(hass, entry, cameras={"C12345": {"name": "Porch"}})
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "camera_select"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"serial": "C12345"}
+    )
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "camera_mode"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "camera_sources"}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "camera_sources"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_IMAGE_SOURCE: MEDIA_SOURCE_CLOUD,
+            CONF_LIVE_STREAM_SOURCE: MEDIA_SOURCE_LOCAL,
+            CONF_RECORDINGS_SOURCE: MEDIA_SOURCE_CLOUD,
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][OPTIONS_KEY_CAMERAS]["C12345"] == {
+        CONF_ENC_KEY: "existing-key",
+        CONF_IMAGE_SOURCE: MEDIA_SOURCE_CLOUD,
+        CONF_LIVE_STREAM_SOURCE: MEDIA_SOURCE_LOCAL,
+        CONF_RECORDINGS_SOURCE: MEDIA_SOURCE_CLOUD,
+    }
 
 
 async def test_options_flow_camera_edit_writes_credentials(hass: HomeAssistant) -> None:

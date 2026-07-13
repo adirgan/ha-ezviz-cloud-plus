@@ -57,13 +57,32 @@ and by the presence of usable telemetry.
 `optionals.powerStatus` for older payloads. This fallback must keep using
 `coerce_int` because EZVIZ commonly returns values such as `"1"`.
 
+## Battery work modes
+
+Cameras advertising `SupportExt.SupportNewWorkMode` capability 687 with the AOV
+work-mode tokens use the new table:
+
+| API value | Entity option      |
+| --------: | ------------------ |
+|         1 | `standard`         |
+|         2 | `plugged_in`       |
+|         3 | `super_power_save` |
+|         4 | `custom`           |
+|         7 | `aov_mode`         |
+
+Capability tokens are compared without depending on order or whitespace, and
+additional tokens are allowed. A compatible 687 capability takes precedence
+over the legacy `SupportWorkModeList` capability 502 so only one work-mode
+select is created. Cameras that advertise only a compatible 502 capability keep
+the classic work-mode table.
+
 ## Verified devices
 
 During initial investigation, both test cameras exposed support capability 119
 as `"1"` and reported active adapter charging:
 
-- `BH3844874`: 68%, `status=1`, `chargingType=0`.
-- `BH1834169`: 94%, `status=1`, `chargingType=0`.
+- Test camera A: 68%, `status=1`, `chargingType=0`.
+- Test camera B: 94%, `status=1`, `chargingType=0`.
 
 Do not add account credentials, device keys, cloud tokens, or MFA values to
-fixtures. The serials above are retained only as previously observed device IDs.
+fixtures or documentation.

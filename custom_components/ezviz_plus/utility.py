@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from pyezvizapi.constants import SupportExt
 from pyezvizapi.feature import (
     lens_defog_config,
     normalize_port_security,
@@ -175,7 +176,11 @@ class SupportExtView:
 
     def __init__(self, data: Mapping[str, Any] | None = None) -> None:
         """Store a normalized copy of the provided supportExt mapping."""
-        self._data: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+        self._data: dict[str, Any] = (
+            {str(key): value for key, value in data.items()}
+            if isinstance(data, Mapping)
+            else {}
+        )
 
     @classmethod
     def from_camera_data(cls, camera_data: Mapping[str, Any]) -> SupportExtView:
@@ -278,6 +283,15 @@ def support_ext_has(
     """Check if supportExt contains the key (and optional values)."""
     view = SupportExtView.from_camera_data(camera_data)
     return view.has(key, expected_values)
+
+
+def supports_aov_work_mode(camera_data: dict[str, Any]) -> bool:
+    """Return whether the camera advertises the new AOV work-mode table."""
+    return support_ext_has(
+        camera_data,
+        str(SupportExt.SupportNewWorkMode.value),
+        ["1,3,10,9,8"],
+    )
 
 
 def passes_description_gates(

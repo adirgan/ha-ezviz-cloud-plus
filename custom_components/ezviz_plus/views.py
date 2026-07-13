@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 import binascii
+from contextlib import suppress
 from http import HTTPStatus
 import logging
 
@@ -12,13 +13,17 @@ from pyezvizapi.constants import HIK_ENCRYPTION_HEADER
 from pyezvizapi.exceptions import PyEzvizError
 from pyezvizapi.utils import decrypt_image
 
+from homeassistant.components.ffmpeg import get_ffmpeg_manager
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.text import DOMAIN as TEXT_DOMAIN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_ENC_KEY, DOMAIN, OPTIONS_KEY_CAMERAS
+from .cloud_video import CloudMpegtsStream
+from .const import CONF_ENC_KEY, DATA_COORDINATOR, DOMAIN, OPTIONS_KEY_CAMERAS
+from .recordings import decode_recording_identifier
+from .sdcard import capture_sd_playback
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +35,28 @@ def async_generate_image_proxy_url(config_entry_id: str, serial: str, url: str) 
         config_entry_id=config_entry_id,
         serial=serial,
         url=urlsafe_b64encode(url.encode("utf-8")).decode("utf-8"),
+    )
+
+
+@callback
+def async_generate_cloud_stream_url(config_entry_id: str, serial: str, token: str) -> str:
+    """Generate a local URL for the cloud MPEG-TS stream proxy."""
+
+    return CloudStreamView.url.format(
+        config_entry_id=config_entry_id,
+        serial=serial,
+        token=token,
+    )
+
+
+@callback
+def async_generate_sd_playback_url(config_entry_id: str, token: str, payload: str) -> str:
+    """Generate a local URL for an SD-card playback stream."""
+
+    return SdPlaybackView.url.format(
+        config_entry_id=config_entry_id,
+        token=token,
+        payload=payload,
     )
 
 
@@ -123,3 +150,147 @@ class ImageProxyView(HomeAssistantView):
             )
 
         return web.Response(body=body, content_type=content_type)
+
+
+class CloudStreamView(HomeAssistantView):
+    """View to expose an EZVIZ cloud stream as MPEG-TS."""
+
+    requires_auth = False
+    url = "/api/ezviz_plus/cloud_stream/{config_entry_id}/{serial}/{token}.ts"
+    name = "api:ezviz_plus_cloud_stream"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the cloud stream view."""
+        self.hass = hass
+
+    async def get(
+        self, request: web.Request, config_entry_id: str, serial: str, token: str
+    ) -> web.StreamResponse:
+        """Return a continuous cloud MPEG-TS stream for HA's stream worker."""
+        entry = self.hass.config_entries.async_get_entry(config_entry_id)
+        if entry is None or entry.domain != DOMAIN:
+            return web.Response(
+                text=f"Unknown config entry id: {config_entry_id}",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+        coordinator = self.hass.data.get(DOMAIN, {}).get(config_entry_id, {}).get(
+            DATA_COORDINATOR
+        )
+        if coordinator is None or serial not in coordinator.data:
+            return web.Response(
+                text=f"Unknown EZVIZ camera serial: {serial}",
+                status=HTTPStatus.NOT_FOUND,
+            )
+        expected_token = self.hass.data.get(DOMAIN, {}).get("_cloud_stream_tokens", {}).get(
+            serial
+        )
+        if expected_token is None or token != expected_token:
+            return web.Response(text="Invalid stream token", status=HTTPStatus.FORBIDDEN)
+
+        media_key = (
+            (entry.options.get(OPTIONS_KEY_CAMERAS, {}) or {})
+            .get(serial, {})
+            .get(CONF_ENC_KEY)
+        )
+        ffmpeg_path = get_ffmpeg_manager(self.hass).binary
+        response = web.StreamResponse(
+            status=HTTPStatus.OK,
+            headers={"Content-Type": "video/mp2t"},
+        )
+        await response.prepare(request)
+
+        cloud_stream = CloudMpegtsStream(
+            coordinator.ezviz_client,
+            serial,
+            media_key=media_key,
+            ffmpeg_path=ffmpeg_path,
+            output_codec="h264",
+        )
+
+        try:
+            while True:
+                chunk = await self.hass.async_add_executor_job(cloud_stream.read)
+                if not chunk:
+                    break
+                await response.write(chunk)
+        except (ConnectionError, ConnectionResetError):
+            pass
+        except PyEzvizError as err:
+            _LOGGER.warning("Cloud stream failed for camera %s: %s", serial, err)
+        finally:
+            cloud_stream.close()
+
+        with suppress(ConnectionError, ConnectionResetError):
+            await response.write_eof()
+        return response
+
+
+class SdPlaybackView(HomeAssistantView):
+    """View to expose an EZVIZ SD-card recording segment as MP4."""
+
+    requires_auth = False
+    url = "/api/ezviz_plus/sd_playback/{config_entry_id}/{token}/{payload}.mp4"
+    name = "api:ezviz_plus_sd_playback"
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the SD playback view."""
+        self.hass = hass
+
+    async def get(
+        self, request: web.Request, config_entry_id: str, token: str, payload: str
+    ) -> web.Response:
+        """Return a playable MPEG-TS clip for one SD-card recording segment."""
+        try:
+            recording = decode_recording_identifier(payload)
+        except (ValueError, binascii.Error, UnicodeDecodeError, KeyError, TypeError):
+            return web.Response(text="Invalid recording payload", status=HTTPStatus.BAD_REQUEST)
+
+        entry = self.hass.config_entries.async_get_entry(config_entry_id)
+        if entry is None or entry.domain != DOMAIN:
+            return web.Response(
+                text=f"Unknown config entry id: {config_entry_id}",
+                status=HTTPStatus.BAD_REQUEST,
+            )
+
+        coordinator = self.hass.data.get(DOMAIN, {}).get(config_entry_id, {}).get(
+            DATA_COORDINATOR
+        )
+        if coordinator is None or recording.serial not in coordinator.data:
+            return web.Response(
+                text=f"Unknown EZVIZ camera serial: {recording.serial}",
+                status=HTTPStatus.NOT_FOUND,
+            )
+
+        expected_token = self.hass.data.get(DOMAIN, {}).get(
+            "_sd_playback_tokens", {}
+        ).get(recording.serial)
+        if expected_token is None or token != expected_token:
+            return web.Response(text="Invalid playback token", status=HTTPStatus.FORBIDDEN)
+
+        media_key = (
+            (entry.options.get(OPTIONS_KEY_CAMERAS, {}) or {})
+            .get(recording.serial, {})
+            .get(CONF_ENC_KEY)
+        )
+        ffmpeg_path = get_ffmpeg_manager(self.hass).binary
+
+        try:
+            body = await self.hass.async_add_executor_job(
+                capture_sd_playback,
+                coordinator.ezviz_client,
+                recording,
+                media_key,
+                ffmpeg_path,
+            )
+        except TypeError as err:
+            _LOGGER.warning("pyEzvizApi does not support cloud playback yet: %s", err)
+            return web.Response(
+                text="Installed pyEzvizApi does not support SD cloud playback yet",
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+        except PyEzvizError as err:
+            _LOGGER.warning("SD playback failed for camera %s: %s", recording.serial, err)
+            return web.Response(text=str(err), status=HTTPStatus.BAD_GATEWAY)
+
+        return web.Response(body=body, content_type="video/mp4")

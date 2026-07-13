@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 
 from pyezvizapi.client import EzvizClient
@@ -32,15 +33,18 @@ from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import EzvizDataUpdateCoordinator
 from .entity import EzvizEntity
 from .utility import (
+    coerce_int,
     has_lens_defog,
     linked_tracking_takeover_enabled,
     passes_description_gates,
     set_lens_defog_option,
     set_linked_tracking_takeover,
     support_ext_has,
+    supports_aov_work_mode,
 )
 
 PARALLEL_UPDATES = 1
+OPTIMISTIC_OPTION_TIMEOUT = 90.0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -55,7 +59,7 @@ class EzvizSelectEntityDescription(SelectEntityDescription):
 
     # Select mapping
     option_range: list[int]
-    get_current_option: Callable[[dict[str, Any]], int]
+    get_current_option: Callable[[dict[str, Any]], int | None]
     set_current_option: Callable[[EzvizClient, str, int, dict[str, Any]], Any]
     options_fn: Callable[[dict[str, Any]], list[str]] | None = None
 
@@ -103,8 +107,9 @@ SELECTS: tuple[EzvizSelectEntityDescription, ...] = (
         ],
         supported_ext_key=str(SupportExt.SupportWorkModeList.value),
         supported_ext_value=["1,2,3,4,10", "1,2,4,10"],
+        is_supported_fn=lambda d: not supports_aov_work_mode(d),
         option_range=[0, 1, 2, 3, 4, 5],
-        get_current_option=lambda d: d["battery_camera_work_mode"],
+        get_current_option=lambda d: coerce_int(d.get("battery_camera_work_mode")),
         set_current_option=lambda ezviz_client,
         serial,
         value,
@@ -117,14 +122,15 @@ SELECTS: tuple[EzvizSelectEntityDescription, ...] = (
         options=[
             "standard",
             "plugged_in",
-            "power_save",
+            "super_power_save",
             "custom",
             "aov_mode",
         ],
         supported_ext_key=str(SupportExt.SupportNewWorkMode.value),
         supported_ext_value=["1,3,10,9,8"],
+        is_supported_fn=supports_aov_work_mode,
         option_range=[1, 2, 3, 4, 7],
-        get_current_option=lambda d: d["battery_camera_work_mode"],
+        get_current_option=lambda d: coerce_int(d.get("battery_camera_work_mode")),
         set_current_option=lambda ezviz_client,
         serial,
         value,
@@ -412,17 +418,33 @@ class EzvizSelect(EzvizEntity, SelectEntity):
         super().__init__(coordinator, serial)
         self.entity_description = description
         self._attr_unique_id = f"{serial}_{description.key}"
+        self._optimistic_option: str | None = None
+        self._optimistic_option_expires = 0.0
 
     @property
     def current_option(self) -> str | None:
         """Return the currently selected option."""
         current_value = self.entity_description.get_current_option(self.data)
+        current_option: str | None = None
+        if current_value is not None:
+            try:
+                idx = self.entity_description.option_range.index(current_value)
+            except ValueError:
+                pass
+            else:
+                if 0 <= idx < len(self.options):
+                    current_option = self.options[idx]
 
-        try:
-            idx = self.entity_description.option_range.index(current_value)
-        except ValueError:
-            return None
-        return self.options[idx] if 0 <= idx < len(self.options) else None
+        optimistic_option = getattr(self, "_optimistic_option", None)
+        if optimistic_option is None:
+            return current_option
+        if current_option == optimistic_option:
+            self._optimistic_option = None
+            return current_option
+        if monotonic() < getattr(self, "_optimistic_option_expires", 0.0):
+            return optimistic_option
+        self._optimistic_option = None
+        return current_option
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
@@ -451,4 +473,7 @@ class EzvizSelect(EzvizEntity, SelectEntity):
         except (HTTPError, PyEzvizError) as err:
             raise HomeAssistantError(f"Cannot set option for {self.entity_id}") from err
 
+        self._optimistic_option = option
+        self._optimistic_option_expires = monotonic() + OPTIMISTIC_OPTION_TIMEOUT
+        self.async_write_ha_state()
         await self.coordinator.async_request_refresh()

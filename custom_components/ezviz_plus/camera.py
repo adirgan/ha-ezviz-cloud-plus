@@ -14,10 +14,14 @@ option name `CONF_FFMPEG_ARGUMENTS` is used to store the RTSP *path* (e.g.,
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
+from io import BytesIO
 import logging
+from secrets import token_urlsafe
 from typing import Any
 
 from pyezvizapi.exceptions import HTTPError, InvalidHost, PyEzvizError
+from pyezvizapi.utils import decrypt_image
 
 from homeassistant.components import ffmpeg
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -30,20 +34,27 @@ from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
     async_get_current_platform,
 )
+from homeassistant.helpers.network import get_url
 
 from .const import (
     CONF_ENC_KEY,
     CONF_FFMPEG_ARGUMENTS,  # used here as RTSP path (main/sub)
+    CONF_IMAGE_SOURCE,
+    CONF_LIVE_STREAM_SOURCE,
     CONF_RTSP_USES_VERIFICATION_CODE,
     DATA_COORDINATOR,
     DEFAULT_CAMERA_USERNAME,
     DEFAULT_FFMPEG_ARGUMENTS,  # default RTSP path
     DOMAIN,
+    MEDIA_SOURCE_AUTO,
+    MEDIA_SOURCE_CLOUD,
+    MEDIA_SOURCE_LOCAL,
     OPTIONS_KEY_CAMERAS,
     SERVICE_WAKE_DEVICE,
 )
 from .coordinator import EzvizDataUpdateCoordinator
 from .entity import EzvizEntity
+from .views import async_generate_cloud_stream_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +82,10 @@ async def async_setup_entry(
         password: str = enc_key if not use_vc else per_cam.get(CONF_PASSWORD, "")
 
         rtsp_path: str = per_cam.get(CONF_FFMPEG_ARGUMENTS, DEFAULT_FFMPEG_ARGUMENTS)
+        image_source: str = per_cam.get(CONF_IMAGE_SOURCE, MEDIA_SOURCE_AUTO)
+        live_stream_source: str = per_cam.get(
+            CONF_LIVE_STREAM_SOURCE, MEDIA_SOURCE_AUTO
+        )
 
         if rtsp_path and not rtsp_path.startswith("/"):
             # Be lenient: if users saved path without leading slash, add it.
@@ -90,9 +105,15 @@ async def async_setup_entry(
                 hass=hass,
                 coordinator=coordinator,
                 serial=serial,  # canonical unique_id
+                config_entry_id=entry.entry_id,
                 camera_username=username,
                 camera_password=password,
                 rtsp_path=rtsp_path,
+                media_options={
+                    CONF_ENC_KEY: enc_key,
+                    CONF_IMAGE_SOURCE: image_source,
+                    CONF_LIVE_STREAM_SOURCE: live_stream_source,
+                },
             )
         )
 
@@ -116,9 +137,11 @@ class EzvizCamera(EzvizEntity, Camera):
         hass: HomeAssistant,
         coordinator: EzvizDataUpdateCoordinator,
         serial: str,
+        config_entry_id: str,
         camera_username: str,
         camera_password: str,
         rtsp_path: str,
+        media_options: Mapping[str, Any],
     ) -> None:
         """Initialize the camera entity."""
         super().__init__(coordinator, serial)
@@ -126,12 +149,23 @@ class EzvizCamera(EzvizEntity, Camera):
 
         self.stream_options[CONF_USE_WALLCLOCK_AS_TIMESTAMPS] = True
 
+        self._config_entry_id = config_entry_id
         self._username: str = camera_username
         self._password: str = camera_password
         self._rtsp_path: str = rtsp_path
+        self._encryption_key = str(media_options.get(CONF_ENC_KEY, ""))
+        self._image_source = str(
+            media_options.get(CONF_IMAGE_SOURCE, MEDIA_SOURCE_AUTO)
+        )
+        self._live_stream_source = str(
+            media_options.get(CONF_LIVE_STREAM_SOURCE, MEDIA_SOURCE_AUTO)
+        )
         self._ffmpeg = get_ffmpeg_manager(hass)
         self._attr_unique_id = serial
         self._rtsp_stream: str = self._build_rtsp()
+        domain_data = hass.data.setdefault(DOMAIN, {})
+        stream_tokens = domain_data.setdefault("_cloud_stream_tokens", {})
+        self._cloud_stream_token = stream_tokens.setdefault(serial, token_urlsafe(24))
 
     def _build_rtsp(self) -> str:
         """Build an RTSP URL from coordinator data and per-camera credentials.
@@ -174,13 +208,41 @@ class EzvizCamera(EzvizEntity, Camera):
     async def async_camera_image(
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
-        """Return a single frame from the camera stream via ffmpeg."""
-        return await ffmpeg.async_get_image(
-            self.hass, self._build_rtsp(), width=width, height=height
-        )
+        """Return a current image using the configured per-camera transport."""
+        if self._image_source != MEDIA_SOURCE_CLOUD:
+            local_image = await ffmpeg.async_get_image(
+                self.hass, self._build_rtsp(), width=width, height=height
+            )
+            if local_image is not None or self._image_source == MEDIA_SOURCE_LOCAL:
+                return local_image
+
+        try:
+            image = BytesIO()
+            await self.hass.async_add_executor_job(
+                partial(
+                    self.coordinator.ezviz_client.save_image,
+                    self._serial,
+                    image,
+                    channel=1,
+                    decrypt=not bool(self._encryption_key),
+                )
+            )
+            image_data = image.getvalue()
+            if self._encryption_key:
+                return await self.hass.async_add_executor_job(
+                    decrypt_image, image_data, self._encryption_key
+                )
+            return image_data
+        except PyEzvizError as err:
+            _LOGGER.warning("Cloud snapshot failed for camera %s: %s", self._serial, err)
+            return None
 
     async def stream_source(self) -> str:
         """Return the RTSP stream source for HA's stream component."""
+        if self._live_stream_source == MEDIA_SOURCE_CLOUD:
+            return get_url(self.hass, allow_external=False) + async_generate_cloud_stream_url(
+                self._config_entry_id, self._serial, self._cloud_stream_token
+            )
         _LOGGER.debug(
             "Configuring Camera %s with ip: %s rtsp port: %s path: %s",
             self._serial,

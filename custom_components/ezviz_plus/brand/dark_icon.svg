@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">EZVIZ Cloud Plus dark-mode icon</title>
+  <desc id="desc">A camera aperture connected to a cloud.</desc>
+  <defs>
+    <linearGradient id="lens" x1="54" y1="40" x2="196" y2="206" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4dddf0"/>
+      <stop offset="1" stop-color="#2c9cff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="116" cy="116" r="84" fill="#e8fbff"/>
+  <circle cx="116" cy="116" r="61" fill="url(#lens)"/>
+  <path d="M116 55a61 61 0 0 1 45 20l-45 41z" fill="#8aebf5"/>
+  <path d="M161 75a61 61 0 0 1 13 51l-58-10z" fill="#28c9df"/>
+  <path d="M174 126a61 61 0 0 1-33 44l-25-54z" fill="#2c9cff"/>
+  <path d="M141 170a61 61 0 0 1-53-4l28-50z" fill="#147fd1"/>
+  <path d="M88 166a61 61 0 0 1-31-45l59-5z" fill="#32b8e5"/>
+  <path d="M57 121a61 61 0 0 1 21-46l38 41z" fill="#52d9e8"/>
+  <circle cx="116" cy="116" r="25" fill="#102a43"/>
+  <circle cx="116" cy="116" r="13" fill="#e8fbff"/>
+  <path d="M157 207h49c18 0 31-11 31-27 0-14-10-25-24-27-5-18-20-29-39-29-22 0-39 15-42 36-12 3-20 12-20 24 0 13 10 23 23 23h22z" fill="#102a43" stroke="#e8fbff" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M174 151v31m-16-15h32" fill="none" stroke="#4dddf0" stroke-width="10" stroke-linecap="round"/>
+</svg>

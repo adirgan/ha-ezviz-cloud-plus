@@ -82,6 +82,63 @@
         "title": "Select a camera",
         "description": "Choose a camera to edit."
       },
+      "camera_mode": {
+        "title": "Choose camera access",
+        "description": "Choose media routing or configure the credentials used by each transport.",
+        "menu_options": {
+          "camera_sources": "Media source preferences",
+          "camera_cloud": "Cloud images",
+          "camera_local": "Local live video (RTSP)"
+        }
+      },
+      "camera_sources": {
+        "title": "Media source preferences",
+        "description": "Choose how camera {serial} accesses each media type. Automatic prefers the local network and falls back to EZVIZ Cloud. Cloud live video and SD recording playback require camera and account support.",
+        "data": {
+          "image_source": "Current image",
+          "live_stream_source": "Live stream",
+          "recordings_source": "Recordings"
+        }
+      },
+      "camera_cloud": {
+        "title": "Cloud images",
+        "description": "Configure the encryption key used to decrypt alarm and motion images downloaded from EZVIZ Cloud.",
+        "menu_options": {
+          "camera_manual": "Enter a known encryption key",
+          "camera_fetch": "Request encryption key from EZVIZ"
+        }
+      },
+      "camera_local": {
+        "title": "Local live video (RTSP)",
+        "description": "Configure credentials for a direct connection to the camera on your local network. This does not configure cloud recordings.",
+        "menu_options": {
+          "camera_manual": "Enter known RTSP credentials",
+          "camera_fetch": "Request RTSP credential from EZVIZ"
+        }
+      },
+      "camera_manual": {
+        "title": "Enter known credential",
+        "description": "Store the credential you already know for camera {serial}. It will not be requested from EZVIZ.",
+        "data": {
+          "rtsp_auth_method": "RTSP authentication method",
+          "username": "RTSP username",
+          "camera_credential": "Camera credential",
+          "ffmpeg_arguments": "RTSP path"
+        },
+        "data_description": {
+          "camera_credential": "For Cloud, enter the encryption key. For local RTSP, enter the encryption key or sticker verification code selected above."
+        }
+      },
+      "camera_fetch": {
+        "title": "Request credential from EZVIZ",
+        "description": "Request the credential for camera {serial} from EZVIZ. A one-time code may be sent to your account email.",
+        "data": {
+          "rtsp_auth_method": "RTSP authentication method to request",
+          "username": "RTSP username",
+          "ephemeral_test_rtsp": "Test local RTSP after retrieval",
+          "ffmpeg_arguments": "RTSP path"
+        }
+      },
       "camera_edit": {
         "title": "Camera settings",
         "description": "Editing camera {serial} at {ip_address}. Set RTSP credentials for this camera. If you don't know them, choose \"fetch_my_key\" and provide one-time codes on the next step if prompted.",
@@ -96,7 +153,7 @@
       },
       "camera_edit_2fa": {
         "title": "One-time codes",
-        "description": "Enter one-time codes for {serial} at {ip_address} to fetch verification/encryption keys.",
+        "description": "Enter the latest one-time code sent by EZVIZ for camera {serial}. Only the code required for the selected operation is shown.",
         "data": {
           "cam_verification_2fa_code": "Code (for sticker/verification key)",
           "cam_encryption_2fa_code": "Code (for encryption key)"
@@ -137,8 +194,8 @@
         "state": {
           "standard": "Standard",
           "plugged_in": "Plugged in",
-          "power_save": "Power saving",
-          "aov_mode": "Always on video",
+          "super_power_save": "Super power saving",
+          "aov_mode": "AOV mode",
           "custom": "Custom"
         }
       },

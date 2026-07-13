@@ -8,6 +8,12 @@ Open this repository as the workspace, then run:
 2. `Tasks: Run Task` -> `Test: battery telemetry` for the focused unit test.
 3. `Tasks: Run Task` -> `HA: run dev instance` for a local HA process.
 
+Run the focused battery work-mode tests directly with:
+
+```bash
+python -m pytest -q tests/components/ezviz_plus/test_select.py
+```
+
 The run task creates `_devconfig/custom_components/ezviz_plus` as a generated
 link to the source component.
 
@@ -60,6 +66,7 @@ docker restart ezviz-plus-ha-dev
 ```bash
 python -m ruff check .
 pytest -q tests/components/ezviz_plus/test_battery.py
+pytest -q tests/components/ezviz_plus/test_select.py
 git diff --check
 ```
 

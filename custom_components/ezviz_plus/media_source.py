@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timedelta
+import secrets
 from typing import Any
 
 from homeassistant.components.media_player import MediaClass, MediaType
@@ -14,12 +16,24 @@ from homeassistant.components.media_source import (
     Unresolvable,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import DATA_COORDINATOR, DOMAIN
-from .views import async_generate_image_proxy_url
+from .recordings import (
+    EzvizRecording,
+    decode_recording_identifier,
+    encode_recording_identifier,
+    search_sdcard_records,
+)
+from .views import async_generate_image_proxy_url, async_generate_sd_playback_url
 
 ALL_CAMERAS_ID = "ALL"
 DEFAULT_LIMIT = 50
+SD_RECORDING_WINDOWS = {
+    "1h": ("SD recordings - last hour", timedelta(hours=1)),
+    "today": ("SD recordings - today", None),
+    "7d": ("SD recordings - last 7 days", timedelta(days=7)),
+}
 
 
 def _b64e(data: str) -> str:
@@ -53,10 +67,20 @@ class EzvizMediaSource(MediaSource):
 
         ident = item.identifier.split("|")
         if ident[0] == "CAM":
-            # Camera specific alarms: CAM|<entry_id>|<serial>[|<limit>]
+            # Camera specific root: CAM|<entry_id>|<serial>
+            _, entry_id, serial = ident
+            return await self._async_camera_root(entry_id, serial)
+
+        if ident[0] == "ALARM":
+            # Camera specific alarms: ALARM|<entry_id>|<serial>[|<limit>]
             _, entry_id, serial, *rest = ident
             limit = int(rest[0]) if rest else DEFAULT_LIMIT
             return await self._async_camera_alarms(entry_id, serial, limit)
+
+        if ident[0] == "SDDIR":
+            # SD recordings: SDDIR|<entry_id>|<serial>|<window>
+            _, entry_id, serial, window = ident
+            return await self._async_camera_sd_recordings(entry_id, serial, window)
 
         raise Unresolvable(f"Unknown media item '{item.identifier}' during browsing.")
 
@@ -79,6 +103,15 @@ class EzvizMediaSource(MediaSource):
             url = _b64d(ident[1])
             mime = ident[2]
             return PlayMedia(url, mime)
+
+        if item.identifier.startswith("SDREC|"):
+            _type, entry_id, payload = item.identifier.split("|", 2)
+            recording = self._decode_recording_payload(payload)
+            token = self._playback_token(recording.serial)
+            return PlayMedia(
+                async_generate_sd_playback_url(entry_id, token, payload),
+                "video/mp4",
+            )
 
         raise Unresolvable(f"Unknown media item '{item.identifier}'.")
 
@@ -131,6 +164,52 @@ class EzvizMediaSource(MediaSource):
 
     # Aggregated view removed per request; browsing is per camera only
 
+    async def _async_camera_root(
+        self, entry_id: str, serial: str
+    ) -> BrowseMediaSource:
+        """Return top-level media directories for one camera."""
+        data = self.hass.data.get(DOMAIN, {}).get(entry_id)
+        coordinator = data[DATA_COORDINATOR] if data else None
+        cam_name = (
+            (coordinator.data or {}).get(serial, {}).get("name", serial)
+            if coordinator
+            else serial
+        )
+        children = [
+            BrowseMediaSource(
+                domain=DOMAIN,
+                identifier=f"ALARM|{entry_id}|{serial}|{DEFAULT_LIMIT}",
+                media_class=MediaClass.DIRECTORY,
+                media_content_type=MediaType.PLAYLIST,
+                title="Recent alarms",
+                can_play=False,
+                can_expand=True,
+            )
+        ]
+        for window, (title, _delta) in SD_RECORDING_WINDOWS.items():
+            children.append(
+                BrowseMediaSource(
+                    domain=DOMAIN,
+                    identifier=f"SDDIR|{entry_id}|{serial}|{window}",
+                    media_class=MediaClass.DIRECTORY,
+                    media_content_type=MediaType.PLAYLIST,
+                    title=title,
+                    can_play=False,
+                    can_expand=True,
+                )
+            )
+
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=f"CAM|{entry_id}|{serial}",
+            media_class=MediaClass.DIRECTORY,
+            media_content_type=MediaType.PLAYLIST,
+            title=cam_name,
+            can_play=False,
+            can_expand=True,
+            children=children,
+        )
+
     async def _async_camera_alarms(
         self, entry_id: str, serial: str, limit: int
     ) -> BrowseMediaSource:
@@ -170,6 +249,46 @@ class EzvizMediaSource(MediaSource):
             children=children,
         )
 
+    async def _async_camera_sd_recordings(
+        self, entry_id: str, serial: str, window: str
+    ) -> BrowseMediaSource:
+        """Return SD-card recording segments for a camera and time window."""
+        data = self.hass.data.get(DOMAIN, {}).get(entry_id)
+        title, start, end = self._recording_window(window)
+        if not data:
+            return BrowseMediaSource(
+                domain=DOMAIN,
+                identifier=f"SDDIR|{entry_id}|{serial}|{window}",
+                media_class=MediaClass.DIRECTORY,
+                media_content_type=MediaType.PLAYLIST,
+                title=f"{title} (unavailable)",
+                can_play=False,
+                can_expand=False,
+                children=[],
+            )
+
+        coordinator = data[DATA_COORDINATOR]
+        client = coordinator.ezviz_client
+        records = await self._async_get_sd_recordings(
+            client,
+            serial=serial,
+            start_time=start,
+            end_time=end,
+        )
+        children = [self._recording_to_media_item(entry_id, record) for record in records]
+        cam_name = (coordinator.data or {}).get(serial, {}).get("name", serial)
+
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=f"SDDIR|{entry_id}|{serial}|{window}",
+            media_class=MediaClass.DIRECTORY,
+            media_content_type=MediaType.PLAYLIST,
+            title=f"{cam_name} - {title}",
+            can_play=False,
+            can_expand=True,
+            children=children,
+        )
+
     async def _async_get_alarms(
         self, client: Any, *, serial: str, limit: int
     ) -> list[dict]:
@@ -183,6 +302,24 @@ class EzvizMediaSource(MediaSource):
             return [a for a in alarms if isinstance(a, dict)]
 
         # Run sync call in executor with a bounded timeout
+        return await self.hass.async_add_executor_job(_fetch)
+
+    async def _async_get_sd_recordings(
+        self, client: Any, *, serial: str, start_time: datetime, end_time: datetime
+    ) -> list[EzvizRecording]:
+        """Fetch SD-card recordings via the client in the executor."""
+
+        def _fetch() -> list[EzvizRecording]:
+            return search_sdcard_records(
+                client,
+                serial,
+                1,
+                start_time,
+                end_time,
+                size=50,
+                source="v2",
+            )
+
         return await self.hass.async_add_executor_job(_fetch)
 
     def _alarm_to_media_item(
@@ -227,3 +364,39 @@ class EzvizMediaSource(MediaSource):
             can_play=bool(img_identifier),
             can_expand=False,
         )
+
+    def _recording_window(self, window: str) -> tuple[str, datetime, datetime]:
+        """Return display title and local naive bounds for a recordings window."""
+        now = dt_util.now().replace(tzinfo=None)
+        if window == "today":
+            return "SD recordings - today", now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ), now
+        title, delta = SD_RECORDING_WINDOWS.get(window, SD_RECORDING_WINDOWS["1h"])
+        return title, now - (delta or timedelta(hours=1)), now
+
+    def _recording_to_media_item(
+        self, entry_id: str, recording: EzvizRecording
+    ) -> BrowseMediaSource:
+        """Convert a normalized recording into a playable media source item."""
+        payload = encode_recording_identifier(recording)
+        return BrowseMediaSource(
+            domain=DOMAIN,
+            identifier=f"SDREC|{entry_id}|{payload}",
+            media_class=MediaClass.VIDEO,
+            media_content_type=MediaType.VIDEO,
+            title=recording.title,
+            can_play=True,
+            can_expand=False,
+        )
+
+    def _decode_recording_payload(self, payload: str) -> EzvizRecording:
+        """Decode a media-source recording payload."""
+        return decode_recording_identifier(payload)
+
+    def _playback_token(self, serial: str) -> str:
+        """Return or create a per-camera playback token."""
+        tokens = self.hass.data.setdefault(DOMAIN, {}).setdefault(
+            "_sd_playback_tokens", {}
+        )
+        return tokens.setdefault(serial, secrets.token_urlsafe(24))

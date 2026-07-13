@@ -58,5 +58,8 @@ jobs:
       - name: mypy
         run: mypy --install-types --non-interactive
 
-      - name: Battery telemetry tests
-        run: python -m pytest -q tests/components/ezviz_plus/test_battery.py
+      - name: Battery and work-mode tests
+        run: >-
+          python -m pytest -q
+          tests/components/ezviz_plus/test_battery.py
+          tests/components/ezviz_plus/test_select.py
