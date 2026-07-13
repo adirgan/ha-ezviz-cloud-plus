@@ -12,11 +12,6 @@ on:
       - ".github/workflows/hassfest.yaml"
       - "!**/*.md"
       - "!docs/**"
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   workflow_dispatch:
   schedule:
     - cron: "0 0 * * *"

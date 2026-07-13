@@ -13,11 +13,6 @@ on:
       - ".github/workflows/**"
       - "!**/*.md"
       - "!docs/**"
-  push:
-    branches: [ main ]         # run after merge
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
   workflow_dispatch:
 
 # Kill older runs for the same ref (stops “double running” on rapid pushes)
