@@ -25,12 +25,38 @@ work, read [docs/HANDOFF.md](docs/HANDOFF.md) first.
 - Do not commit, tag, push, or publish unless the user explicitly requests it.
 - Do not discard unrelated working-tree changes.
 
+## Coordinator state invariants
+
+- Route every runtime API call through `coordinator.ezviz_client`; never retain
+  or call the raw shared client outside coordinator construction.
+- Detach polling snapshots from the upstream mutable cache while holding the
+  serialized client lock. Published coordinator data must share no mutable
+  references with `pyEzvizApi`.
+- Treat missing raw sections or nested keys as a partial snapshot, not as proof
+  of synthesized values such as `False`, `None`, `-1`, `idle`, or `standard`.
+- Retain the last complete per-camera snapshot during a transient partial or
+  global failure. Expire availability after two failures or 75 seconds.
+- After degradation, require two equal complete snapshots before publishing a
+  changed functional state. Authentication failures and explicit `status == 2`
+  remain immediate.
+- Apply MQTT and optimistic command updates through coordinator copy-on-write
+  helpers, including reconciler state; never mutate `coordinator.data` in place.
+- Keep `DataUpdateCoordinator(always_update=False)` so equal snapshots do not
+  notify listeners. Notify explicitly when only camera health changes.
+- Diagnostics must use the existing redacted coordinator snapshot and sanitized
+  health metadata; they must not issue another cloud request.
+- Add focused tests for every newly consumed raw section or field and for any
+  change to partial-snapshot, recovery, timeout, availability, or push behavior.
+- Never log payloads, tokens, credentials, camera keys, image URLs, or serials
+  at warning/error level. Health telemetry must be counts or booleans only.
+
 ## Required validation
 
 Run the narrowest relevant test first, then:
 
 ```bash
 python -m ruff check .
+pytest -q tests/components/ezviz_plus/test_coordinator_transient.py
 pytest -q tests/components/ezviz_plus/test_battery.py
 git diff --check
 ```

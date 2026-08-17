@@ -26,28 +26,6 @@ TO_REDACT_COORDINATOR = {
     "VIDEO_QUALITY",
 }
 
-TO_REDACT_PYEZVIZ_DATA = {
-    "deviceSerial",
-    "netIp",
-    "wanIp",
-    "encryptPwd",
-    "ssid",
-    "mac",
-    "userName",
-    "fullSerial",
-    "superDeviceSerial",
-    "resourceId",
-    "CLOUD",
-    "VTM",
-    "P2P",
-    "KMS",
-    "TIME_PLAN",
-    "CHANNEL",
-    "QOS",
-    "VIDEO_QUALITY",
-}
-
-
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -56,15 +34,9 @@ async def async_get_config_entry_diagnostics(
         DATA_COORDINATOR
     ]
 
-    ezviz_api_page_list = await hass.async_add_executor_job(
-        coordinator.ezviz_client.get_device_infos
-    )
-
     return {
         "ezviz_coordinator_data": [
             async_redact_data(coordinator.data, TO_REDACT_COORDINATOR)
         ],
-        "ezviz_api_page_list": [
-            async_redact_data(ezviz_api_page_list, TO_REDACT_PYEZVIZ_DATA)
-        ],
+        "ezviz_coordinator_health": coordinator.diagnostic_health,
     }

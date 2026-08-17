@@ -1,8 +1,29 @@
 # Current Handoff
 
-Last updated: 2026-07-13.
+Last updated: 2026-08-17.
 
 ## Completed
+
+- Stabilized the full coordinator state machine against synchronized partial
+  EZVIZ responses observed across two cameras. Missing raw structure now retains
+  each camera's last complete snapshot instead of publishing synthesized
+  `unknown`, `idle`, `False`, or `standard` values.
+- Serialized all runtime calls to the shared `pyEzvizApi` client through a
+  transparent coordinator proxy and deep-copied `load_cameras()` results while
+  holding its lock.
+- Added bounded stale-data health: one transient failure is retained; camera
+  availability expires on the second failure or after 75 seconds.
+- Added two-snapshot confirmation for changed recovery values after degradation,
+  while authentication failures and explicit offline status remain immediate.
+- Converted MQTT and individual defence optimistic updates to copy-on-write and
+  synchronized them with the reconciler.
+- Preserved timed-out executor work for the next refresh and observe any active
+  load during coordinator shutdown.
+- Removed the additional cloud request from diagnostics and exposed only the
+  redacted coordinator snapshot plus sanitized health metadata.
+- Added focused regression coverage in
+  `tests/components/ezviz_plus/test_coordinator_transient.py`, including the
+  observed `custom -> partial -> standard -> standard` work-mode sequence.
 
 - Cloned `RenierM26/ha-ezviz` at upstream tag `0.2.0.24`.
 - Renamed integration directory and domain from `ezviz_cloud` to `ezviz_plus`.
@@ -32,6 +53,9 @@ Last updated: 2026-07-13.
   - `upstream`: `https://github.com/RenierM26/ha-ezviz.git`
 
 ## Validated
+
+- Transient coordinator, diagnostics, and alarm copy-on-write tests pass in the
+  repository `.venv` on Python 3.14.6.
 
 - `python -m ruff check .` passes.
 - JSON metadata and translation files parse.
@@ -122,12 +146,10 @@ host returned in `token["api_url"]`, with the selected host as fallback.
 
 ## Immediate next steps
 
-1. Verify battery state, binary charging, and charging source on both cameras.
-2. Add entity-level tests if setup reveals gating or translation issues.
+1. Verify stable state history in Home Assistant over multiple polling cycles.
+2. Verify battery state, binary charging, and charging source on both cameras.
 3. Visually confirm the already functional cloud live stream in Lovelace.
-4. Run CI, HACS, and hassfest checks after the pending changes are committed and
-   pushed.
-5. Create a `v0.2.0` release using `CHANGELOG.md` after the checks pass.
+4. Run CI, HACS, and hassfest checks before the next release.
 
 ## Working-tree status
 

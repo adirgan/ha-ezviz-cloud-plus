@@ -122,8 +122,9 @@ class EzvizCameraAlarm(EzvizEntity, AlarmControlPanelEntity):
             action = "arm" if enable else "disarm"
             raise HomeAssistantError(f"Unable to {action} camera") from error
 
-        self.data["alarm_notify"] = enable
-        self.coordinator.async_set_updated_data(dict(self.coordinator.data))
+        self.coordinator.merge_camera_update(
+            self._serial, {"alarm_notify": enable}
+        )
 
 
 class EzvizAlarm(AlarmControlPanelEntity):

@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevented partial EZVIZ camera responses from publishing synchronized
+  transient `unknown`, `idle`, false, or default work-mode states.
+- Serialized shared API-client access, detached mutable upstream snapshots, and
+  reused in-flight polling work after timeout.
+- Made MQTT and optimistic camera updates copy-on-write and health-aware.
+- Removed the extra cloud request previously made while collecting diagnostics.
+
 ## [0.2.1] - 2026-07-13
 
 ### Changed

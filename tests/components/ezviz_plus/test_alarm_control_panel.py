@@ -39,7 +39,7 @@ def camera_alarm() -> tuple[EzvizCameraAlarm, SimpleNamespace, MagicMock]:
     coordinator = SimpleNamespace(
         data={"CAMERA123": camera_data(supports_defence=True)},
         ezviz_client=client,
-        async_set_updated_data=MagicMock(),
+        merge_camera_update=MagicMock(),
     )
     entity = EzvizCameraAlarm(coordinator, "CAMERA123")
 
@@ -95,17 +95,19 @@ def test_camera_alarm_arms_and_disarms(
     asyncio.run(entity.async_alarm_arm_away())
 
     client.set_camera_defence.assert_called_once_with("CAMERA123", 1)
-    assert entity.alarm_state is AlarmControlPanelState.ARMED_AWAY
-    coordinator.async_set_updated_data.assert_called_once()
+    coordinator.merge_camera_update.assert_called_once_with(
+        "CAMERA123", {"alarm_notify": True}
+    )
 
     client.set_camera_defence.reset_mock()
-    coordinator.async_set_updated_data.reset_mock()
+    coordinator.merge_camera_update.reset_mock()
 
     asyncio.run(entity.async_alarm_disarm())
 
     client.set_camera_defence.assert_called_once_with("CAMERA123", 0)
-    assert entity.alarm_state is AlarmControlPanelState.DISARMED
-    coordinator.async_set_updated_data.assert_called_once()
+    coordinator.merge_camera_update.assert_called_once_with(
+        "CAMERA123", {"alarm_notify": False}
+    )
 
 
 def test_camera_alarm_converts_api_errors(
@@ -119,4 +121,4 @@ def test_camera_alarm_converts_api_errors(
         asyncio.run(entity.async_alarm_arm_away())
 
     assert entity.alarm_state is AlarmControlPanelState.DISARMED
-    coordinator.async_set_updated_data.assert_not_called()
+    coordinator.merge_camera_update.assert_not_called()

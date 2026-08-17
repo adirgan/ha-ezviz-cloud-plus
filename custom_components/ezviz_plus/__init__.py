@@ -164,6 +164,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if data and (mqtt := data.get(MQTT_HANDLER)):
         await hass.async_add_executor_job(mqtt.stop)
 
+    if data and (coordinator := data.get(DATA_COORDINATOR)):
+        await coordinator.async_shutdown()
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
