@@ -94,10 +94,7 @@ class EzvizEntity(CoordinatorEntity[EzvizDataUpdateCoordinator], Entity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return bool(
-            self.coordinator.is_camera_available(self._serial)
-            and self.data["status"] != 2
-        )
+        return bool(self.data["status"] != 2)
 
 
 class EzvizBaseEntity(Entity):
@@ -125,7 +122,4 @@ class EzvizBaseEntity(Entity):
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        return bool(
-            self.coordinator.is_camera_available(self._serial)
-            and self.data["status"] != 2
-        )
+        return bool(self.data["status"] != 2)

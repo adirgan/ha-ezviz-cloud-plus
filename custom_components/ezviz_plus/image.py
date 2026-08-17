@@ -162,14 +162,10 @@ class EzvizLastMotion(EzvizEntity, ImageEntity):
         ):
             self.alarm_image_password = cam_enc_key_entity_state.state
             self._cached_image = None
-            _LOGGER.debug(
-                "Camera encryption key updated for %s, encryption entity id is: %s",
-                self.entity_id,
-                self.cam_key_entity_id,
-            )
+            _LOGGER.debug("Camera encryption key updated")
 
         if self.data["last_alarm_pic"] != self._attr_image_url:
-            _LOGGER.debug("Image url changed to %s", self.data["last_alarm_pic"])
+            _LOGGER.debug("Last motion image reference changed")
 
             self._attr_image_url = self.data["last_alarm_pic"]
             self._cached_image = None

@@ -35,7 +35,11 @@ work, read [docs/HANDOFF.md](docs/HANDOFF.md) first.
 - Treat missing raw sections or nested keys as a partial snapshot, not as proof
   of synthesized values such as `False`, `None`, `-1`, `idle`, or `standard`.
 - Retain the last complete per-camera snapshot during a transient partial or
-  global failure. Expire availability after two failures or 75 seconds.
+  global failure. After two failures or 75 seconds, expire diagnostic camera
+  health but keep retained entity values available unless `status == 2`.
+- Treat `requests` transport exceptions as transient polling failures when a
+  retained snapshot exists. Account-alarm polling must return before Home
+  Assistant's ten-second slow-update threshold and retain its last state.
 - After degradation, require two equal complete snapshots before publishing a
   changed functional state. Authentication failures and explicit `status == 2`
   remain immediate.
@@ -47,8 +51,8 @@ work, read [docs/HANDOFF.md](docs/HANDOFF.md) first.
   health metadata; they must not issue another cloud request.
 - Add focused tests for every newly consumed raw section or field and for any
   change to partial-snapshot, recovery, timeout, availability, or push behavior.
-- Never log payloads, tokens, credentials, camera keys, image URLs, or serials
-  at warning/error level. Health telemetry must be counts or booleans only.
+- Never log payloads, tokens, credentials, camera keys, signed image URLs, or
+  serials. Health telemetry must be counts or booleans only.
 
 ## Required validation
 

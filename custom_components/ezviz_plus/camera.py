@@ -13,15 +13,18 @@ option name `CONF_FFMPEG_ARGUMENTS` is used to store the RTSP *path* (e.g.,
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from functools import partial
 from io import BytesIO
 import logging
 from secrets import token_urlsafe
+import time
 from typing import Any
 
 from pyezvizapi.exceptions import HTTPError, InvalidHost, PyEzvizError
 from pyezvizapi.utils import decrypt_image
+from requests.exceptions import RequestException
 
 from homeassistant.components import ffmpeg
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -57,6 +60,8 @@ from .entity import EzvizEntity
 from .views import async_generate_cloud_stream_url
 
 _LOGGER = logging.getLogger(__name__)
+_CLOUD_IMAGE_RETRY_DELAYS = (0.0, 0.5, 1.0)
+_CAMERA_IMAGE_REFRESH_INTERVAL = 5 * 60.0
 
 
 async def async_setup_entry(
@@ -93,8 +98,7 @@ async def async_setup_entry(
 
         if not password:
             _LOGGER.warning(
-                "Camera %s missing RTSP password%s; stream may be unavailable until provided",
-                serial,
+                "A configured camera is missing its RTSP password%s; stream may be unavailable until provided",
                 " (verification code expected for RTSP)"
                 if use_vc
                 else " (encryption code expected for RTSP)",
@@ -163,6 +167,9 @@ class EzvizCamera(EzvizEntity, Camera):
         self._ffmpeg = get_ffmpeg_manager(hass)
         self._attr_unique_id = serial
         self._rtsp_stream: str = self._build_rtsp()
+        self._last_camera_image: bytes | None = None
+        self._camera_image_updated_at = 0.0
+        self._camera_image_task: asyncio.Task[bytes | None] | None = None
         domain_data = hass.data.setdefault(DOMAIN, {})
         stream_tokens = domain_data.setdefault("_cloud_stream_tokens", {})
         self._cloud_stream_token = stream_tokens.setdefault(serial, token_urlsafe(24))
@@ -178,6 +185,12 @@ class EzvizCamera(EzvizEntity, Camera):
         port = self.data["local_rtsp_port"]
         path = self._rtsp_path or ""
         return f"rtsp://{self._username}:{self._password}@{ip}:{port}{path}"
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel an active preview refresh when the entity is removed."""
+        if self._camera_image_task is not None:
+            self._camera_image_task.cancel()
+        await super().async_will_remove_from_hass()
 
     @property
     def is_recording(self) -> bool:
@@ -209,33 +222,83 @@ class EzvizCamera(EzvizEntity, Camera):
         self, width: int | None = None, height: int | None = None
     ) -> bytes | None:
         """Return a current image using the configured per-camera transport."""
+        image_task = self._camera_image_task
+        image_is_fresh = (
+            self._last_camera_image is not None
+            and time.monotonic() - self._camera_image_updated_at
+            < _CAMERA_IMAGE_REFRESH_INTERVAL
+        )
+        if not image_is_fresh and (image_task is None or image_task.done()):
+            image_task = asyncio.create_task(
+                self._async_refresh_camera_image(width, height)
+            )
+            image_task.add_done_callback(self._camera_image_refresh_finished)
+            self._camera_image_task = image_task
+
+        if self._last_camera_image is not None:
+            return self._last_camera_image
+
+        assert image_task is not None
+        return await asyncio.shield(image_task)
+
+    async def _async_refresh_camera_image(
+        self, width: int | None, height: int | None
+    ) -> bytes | None:
+        """Refresh the cached preview without depending on the proxy request."""
         if self._image_source != MEDIA_SOURCE_CLOUD:
             local_image = await ffmpeg.async_get_image(
                 self.hass, self._build_rtsp(), width=width, height=height
             )
-            if local_image is not None or self._image_source == MEDIA_SOURCE_LOCAL:
+            if local_image is not None:
+                self._last_camera_image = local_image
+                self._camera_image_updated_at = time.monotonic()
                 return local_image
+            if self._image_source == MEDIA_SOURCE_LOCAL:
+                return self._last_camera_image
 
-        try:
+        for attempt, retry_delay in enumerate(_CLOUD_IMAGE_RETRY_DELAYS):
+            if retry_delay:
+                await asyncio.sleep(retry_delay)
+
             image = BytesIO()
-            await self.hass.async_add_executor_job(
-                partial(
-                    self.coordinator.ezviz_client.save_image,
-                    self._serial,
-                    image,
-                    channel=1,
-                    decrypt=not bool(self._encryption_key),
+            try:
+                await self.hass.async_add_executor_job(
+                    partial(
+                        self.coordinator.ezviz_client.save_image,
+                        self._serial,
+                        image,
+                        channel=1,
+                        decrypt=not bool(self._encryption_key),
+                    )
                 )
-            )
-            image_data = image.getvalue()
-            if self._encryption_key:
-                return await self.hass.async_add_executor_job(
-                    decrypt_image, image_data, self._encryption_key
-                )
-            return image_data
-        except PyEzvizError as err:
-            _LOGGER.warning("Cloud snapshot failed for camera %s: %s", self._serial, err)
-            return None
+                image_data = image.getvalue()
+                if self._encryption_key:
+                    image_data = await self.hass.async_add_executor_job(
+                        decrypt_image, image_data, self._encryption_key
+                    )
+                if image_data:
+                    self._last_camera_image = image_data
+                    self._camera_image_updated_at = time.monotonic()
+                    return image_data
+            except (PyEzvizError, RequestException):
+                if attempt < len(_CLOUD_IMAGE_RETRY_DELAYS) - 1:
+                    continue
+            else:
+                if attempt < len(_CLOUD_IMAGE_RETRY_DELAYS) - 1:
+                    continue
+            break
+
+        _LOGGER.debug("Cloud snapshot retries exhausted; retaining last preview")
+        return self._last_camera_image
+
+    def _camera_image_refresh_finished(
+        self, image_task: asyncio.Task[bytes | None]
+    ) -> None:
+        """Publish a completed background preview refresh."""
+        if image_task.cancelled() or image_task.exception() is not None:
+            return
+        if image_task.result() is not None and self.hass is not None:
+            self.async_write_ha_state()
 
     async def stream_source(self) -> str:
         """Return the RTSP stream source for HA's stream component."""
@@ -243,13 +306,6 @@ class EzvizCamera(EzvizEntity, Camera):
             return get_url(self.hass, allow_external=False) + async_generate_cloud_stream_url(
                 self._config_entry_id, self._serial, self._cloud_stream_token
             )
-        _LOGGER.debug(
-            "Configuring Camera %s with ip: %s rtsp port: %s path: %s",
-            self._serial,
-            self.data["local_ip"],
-            self.data["local_rtsp_port"],
-            self._rtsp_path,
-        )
         return self._build_rtsp()
 
     def perform_wake_device(self) -> None:

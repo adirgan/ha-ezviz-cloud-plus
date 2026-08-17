@@ -20,6 +20,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   waiting forever for executor work that Python cannot cancel.
 - Made MQTT and optimistic camera updates copy-on-write and health-aware.
 - Removed the extra cloud request previously made while collecting diagnostics.
+- Retained published entity values and Recorder continuity during transient
+  cloud-health expiry; explicit EZVIZ offline status remains immediate.
+- Handled raw `requests` transport failures without noisy Home Assistant update
+  errors and bounded account-alarm polling below the slow-update threshold.
+- Removed signed image URLs, camera serials, and raw cloud failure details from
+  runtime logs and made cloud-video process cleanup nonblocking.
+- Made camera previews resilient to slow or transient cloud captures with
+  bounded retries, a shared background refresh that survives proxy-request
+  cancellation, and a battery-conscious five-minute last-valid-image cache.
 
 ## [0.2.1] - 2026-07-13
 

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
 
 from pyezvizapi import PyEzvizError
 from pyezvizapi.constants import DefenseModeType, SupportExt
+from requests.exceptions import RequestException
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
@@ -20,6 +22,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DATA_COORDINATOR, DOMAIN, MANUFACTURER
 from .coordinator import EzvizDataUpdateCoordinator
@@ -30,6 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=60)
 PARALLEL_UPDATES = 0
+ALARM_UPDATE_TIMEOUT = 8
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -127,7 +131,7 @@ class EzvizCameraAlarm(EzvizEntity, AlarmControlPanelEntity):
         )
 
 
-class EzvizAlarm(AlarmControlPanelEntity):
+class EzvizAlarm(RestoreEntity, AlarmControlPanelEntity):
     """Representation of an Ezviz alarm control panel."""
 
     entity_description: EzvizAlarmControlPanelEntityDescription
@@ -155,6 +159,18 @@ class EzvizAlarm(AlarmControlPanelEntity):
 
     async def async_added_to_hass(self) -> None:
         """Entity added to hass."""
+        await super().async_added_to_hass()
+        if (
+            self._attr_alarm_state is None
+            and (last_state := await self.async_get_last_state()) is not None
+            and last_state.state
+            in {
+                AlarmControlPanelState.DISARMED,
+                AlarmControlPanelState.ARMED_AWAY,
+                AlarmControlPanelState.ARMED_HOME,
+            }
+        ):
+            self._attr_alarm_state = AlarmControlPanelState(last_state.state)
         self.async_schedule_update_ha_state(True)
 
     def alarm_disarm(self, code: str | None = None) -> None:
@@ -190,21 +206,23 @@ class EzvizAlarm(AlarmControlPanelEntity):
         except PyEzvizError as err:
             raise HomeAssistantError("Cannot arm EZVIZ alarm") from err
 
-    def update(self) -> None:
+    async def async_update(self) -> None:
         """Fetch data from EZVIZ."""
-        ezviz_alarm_state_number = "0"
         try:
-            ezviz_alarm_state_number = (
-                self.coordinator.ezviz_client.get_group_defence_mode()
-            )
-            _LOGGER.debug(
-                "Updating EZVIZ alarm with response %s", ezviz_alarm_state_number
-            )
-            self._attr_alarm_state = self.entity_description.ezviz_alarm_states[
-                int(ezviz_alarm_state_number)
-            ]
+            async with asyncio.timeout(ALARM_UPDATE_TIMEOUT):
+                ezviz_alarm_state_number = await self.hass.async_add_executor_job(
+                    self.coordinator.ezviz_client.get_group_defence_mode
+                )
+        except TimeoutError:
+            _LOGGER.debug("Retaining EZVIZ alarm state after API timeout")
+            return
+        except (PyEzvizError, RequestException):
+            _LOGGER.debug("Retaining EZVIZ alarm state after transient API failure")
+            return
 
-        except PyEzvizError as error:
-            raise HomeAssistantError(
-                f"Could not fetch EZVIZ alarm status: {error}"
-            ) from error
+        _LOGGER.debug(
+            "Updating EZVIZ alarm with response %s", ezviz_alarm_state_number
+        )
+        self._attr_alarm_state = self.entity_description.ezviz_alarm_states[
+            int(ezviz_alarm_state_number)
+        ]

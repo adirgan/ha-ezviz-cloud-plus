@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from pyezvizapi import PyEzvizError
 import pytest
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from custom_components.ezviz_plus.alarm_control_panel import (
     EzvizAlarm,
@@ -122,3 +123,107 @@ def test_camera_alarm_converts_api_errors(
 
     assert entity.alarm_state is AlarmControlPanelState.DISARMED
     coordinator.merge_camera_update.assert_not_called()
+
+
+def test_account_alarm_retains_state_on_transport_failure() -> None:
+    """Do not fail the HA entity update for a transient requests error."""
+    coordinator = SimpleNamespace(ezviz_client=MagicMock())
+    coordinator.ezviz_client.get_group_defence_mode.side_effect = (
+        RequestsConnectionError("cloud unavailable")
+    )
+    entity = EzvizAlarm(
+        coordinator,
+        "entry-1",
+        MagicMock(),
+        SimpleNamespace(
+            key="ezviz_alarm",
+            ezviz_alarm_states=[
+                None,
+                AlarmControlPanelState.DISARMED,
+                AlarmControlPanelState.ARMED_AWAY,
+                AlarmControlPanelState.ARMED_HOME,
+            ],
+        ),
+    )
+    entity._attr_alarm_state = AlarmControlPanelState.DISARMED
+    entity.hass = SimpleNamespace(
+        async_add_executor_job=AsyncMock(
+            side_effect=RequestsConnectionError("cloud unavailable")
+        )
+    )
+
+    asyncio.run(entity.async_update())
+
+    assert entity.alarm_state is AlarmControlPanelState.DISARMED
+
+
+def test_account_alarm_restores_state_before_first_poll() -> None:
+    """Avoid an unknown Recorder state while the initial cloud poll starts."""
+    entity = EzvizAlarm(
+        SimpleNamespace(ezviz_client=MagicMock()),
+        "entry-1",
+        MagicMock(),
+        SimpleNamespace(key="ezviz_alarm"),
+    )
+    entity.async_get_last_state = AsyncMock(
+        return_value=SimpleNamespace(state=AlarmControlPanelState.DISARMED)
+    )
+    entity.async_schedule_update_ha_state = MagicMock()
+
+    asyncio.run(entity.async_added_to_hass())
+
+    assert entity.alarm_state is AlarmControlPanelState.DISARMED
+    entity.async_schedule_update_ha_state.assert_called_once_with(True)
+
+
+def test_account_alarm_does_not_restore_unknown_state() -> None:
+    """Ignore nonfunctional Recorder states during startup restoration."""
+    entity = EzvizAlarm(
+        SimpleNamespace(ezviz_client=MagicMock()),
+        "entry-1",
+        MagicMock(),
+        SimpleNamespace(key="ezviz_alarm"),
+    )
+    entity.async_get_last_state = AsyncMock(
+        return_value=SimpleNamespace(state="unknown")
+    )
+    entity.async_schedule_update_ha_state = MagicMock()
+
+    asyncio.run(entity.async_added_to_hass())
+
+    assert entity.alarm_state is None
+
+
+def test_account_alarm_retains_state_on_timeout(monkeypatch) -> None:
+    """Return before HA's slow-update warning while an API call is blocked."""
+    async def wait_forever(_target) -> None:
+        await blocked_call.wait()
+
+    coordinator = SimpleNamespace(ezviz_client=MagicMock())
+    blocked_call = asyncio.Event()
+    entity = EzvizAlarm(
+        coordinator,
+        "entry-1",
+        MagicMock(),
+        SimpleNamespace(
+            key="ezviz_alarm",
+            ezviz_alarm_states=[
+                None,
+                AlarmControlPanelState.DISARMED,
+                AlarmControlPanelState.ARMED_AWAY,
+                AlarmControlPanelState.ARMED_HOME,
+            ],
+        ),
+    )
+    entity._attr_alarm_state = AlarmControlPanelState.DISARMED
+    entity.hass = SimpleNamespace(
+        async_add_executor_job=AsyncMock(side_effect=wait_forever)
+    )
+    monkeypatch.setattr(
+        "custom_components.ezviz_plus.alarm_control_panel.ALARM_UPDATE_TIMEOUT",
+        0.01,
+    )
+
+    asyncio.run(entity.async_update())
+
+    assert entity.alarm_state is AlarmControlPanelState.DISARMED

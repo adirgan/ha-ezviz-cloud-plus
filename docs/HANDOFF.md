@@ -12,7 +12,9 @@ Last updated: 2026-08-17.
   transparent coordinator proxy and deep-copied `load_cameras()` results while
   holding its lock.
 - Added bounded stale-data health: one transient failure is retained; camera
-  availability expires on the second failure or after 75 seconds.
+  diagnostic health expires on the second failure or after 75 seconds while
+  retained entity values remain available unless EZVIZ explicitly reports
+  `status == 2`.
 - Added two-snapshot confirmation for changed recovery values after degradation,
   while authentication failures and explicit offline status remain immediate.
 - Converted MQTT and individual defence optimistic updates to copy-on-write and
@@ -26,6 +28,19 @@ Last updated: 2026-08-17.
   if it eventually completes, and shutdown never waits indefinitely for it.
 - Removed the additional cloud request from diagnostics and exposed only the
   redacted coordinator snapshot plus sanitized health metadata.
+- Added handling for raw `requests` connection/read failures emitted by
+  `pyEzvizApi`. Existing coordinator and account-alarm state is retained without
+  raising an HA update error during transient cloud outages.
+- Converted account-alarm polling to async executor work with an eight-second
+  timeout, below Home Assistant's slow-update warning threshold.
+- Sanitized runtime logging so signed image URLs, camera serials, and raw cloud
+  failure text are not emitted. Cloud-video cleanup no longer waits for FFmpeg
+  on the Home Assistant event loop.
+- Stabilized camera previews when EZVIZ capture requests take longer than Home
+  Assistant's ten-second camera-proxy timeout. Preview refresh now runs in one
+  shielded background task, retries transient API/transport failures, retains
+  the last valid LAN or cloud JPEG, serves fresh cache for five minutes, and
+  cancels outstanding work when the entity is removed.
 - Added focused regression coverage in
   `tests/components/ezviz_plus/test_coordinator_transient.py`, including the
   observed `custom -> partial -> standard -> standard` work-mode sequence.
@@ -61,6 +76,13 @@ Last updated: 2026-08-17.
 
 - Transient coordinator, diagnostics, and alarm copy-on-write tests pass in the
   repository `.venv` on Python 3.14.6.
+- A controlled Docker outage redirected only the EZVIZ API host while leaving
+  Home Assistant reachable. Three failure cycles plus a concurrent coordinator
+  and account-alarm refresh retained both battery values at `100`, work modes at
+  `custom`/`standard`, and the alarm at `disarmed` with unchanged
+  `last_changed` timestamps. Recorder added no `unknown` or `unavailable`
+  transitions during the outage, and recovery completed without an integration
+  traceback or account-alarm slow-update warning.
 
 - `python -m ruff check .` passes.
 - JSON metadata and translation files parse.
@@ -87,6 +109,12 @@ Last updated: 2026-08-17.
 - Per-camera image routing was checked in the Docker Home Assistant runtime:
   local-only does not call cloud, cloud-only skips RTSP, and automatic falls
   back to cloud when RTSP returns no frame.
+- Docker reproduced an intermittent preview failure: the first `Entrada
+Parcelas` cloud capture completed in 10.59 seconds, after HA's camera proxy had
+  already returned HTTP 500 at 10 seconds. With background refresh and cache,
+  six consecutive preview requests returned the same valid JPEG in 3-8 ms and
+  generated only one cloud capture. A selective EZVIZ API outage still returned
+  the cached JPEG in 2-9 ms without reloading the page.
 - Cloud live-video capture is implemented inside the integration, without
   modifying `pyEzvizApi`. `cloud_video.py` uses the API's existing
   `open_cloud_stream()` plus stream helpers to detect RTP, select the video
@@ -151,10 +179,9 @@ host returned in `token["api_url"]`, with the selected host as fallback.
 
 ## Immediate next steps
 
-1. Verify stable state history in Home Assistant over multiple polling cycles.
-2. Verify battery state, binary charging, and charging source on both cameras.
-3. Visually confirm the already functional cloud live stream in Lovelace.
-4. Run CI, HACS, and hassfest checks before the next release.
+1. Verify battery charging and charging-source entities on both cameras.
+2. Visually confirm the already functional cloud live stream in Lovelace.
+3. Run CI, HACS, and hassfest checks before the next release.
 
 ## Working-tree status
 

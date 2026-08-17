@@ -18,6 +18,7 @@ from pyezvizapi.exceptions import (
     InvalidURL,
     PyEzvizError,
 )
+from requests.exceptions import RequestException
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -235,8 +236,9 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             self._load_cameras_task = None
             raise ConfigEntryAuthFailed from error
 
-        except (InvalidURL, HTTPError, PyEzvizError) as error:
+        except (InvalidURL, HTTPError, PyEzvizError, RequestException) as error:
             self._load_cameras_task = None
+            self._consecutive_load_timeouts = 0
             if self._retain_after_global_failure():
                 return self.data
             raise UpdateFailed(f"Invalid response from API: {error}") from error

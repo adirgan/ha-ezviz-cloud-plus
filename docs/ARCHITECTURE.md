@@ -17,8 +17,18 @@
 6. A timed-out polling Future is reused once to permit normal late completion.
    If it times out again, the coordinator isolates the blocked client and creates
    a replacement from the last known token so its lock cannot stall new work.
-7. `mqtt.py` and optimistic commands publish copy-on-write camera updates and
+7. Raw `requests` transport exceptions retain an existing snapshot instead of
+   failing the Home Assistant refresh. Account-alarm polling has an independent
+   eight-second timeout so client-lock contention cannot trigger HA's slow-update
+   warning or replace its last known state.
+8. `mqtt.py` and optimistic commands publish copy-on-write camera updates and
    synchronize the reconciler so polling cannot revert newer local information.
+9. Camera previews use stale-while-revalidate semantics. A single shared task
+   retries transient cloud capture failures and survives Home Assistant's proxy
+   request timeout; the last valid JPEG is served immediately for five minutes
+   so an open dashboard cannot repeatedly wake a battery camera. Stale data
+   refreshes once in the background, and entity removal cancels the remaining
+   refresh task.
 
 ## Ownership map
 
@@ -29,6 +39,8 @@
 - `coordinator.py`: serialized cloud access, snapshot ownership, transient-state
   reconciliation, per-camera health, and copy-on-write updates.
 - `entity.py`: common entity/device behavior.
+- `camera.py`: RTSP/cloud preview routing, bounded snapshot retries, last-valid
+  preview caching, and live-stream source selection.
 - `utility.py`: payload normalization, feature traversal, and support gates.
 - `sensor.py`, `binary_sensor.py`, etc.: explicit HA entity descriptions.
 - `strings.json` and `translations/en.json`: entity and config-flow translations.
@@ -38,11 +50,14 @@
 
 - Structural absence is unknown input, not a functional state change.
 - Explicit EZVIZ offline status and authentication failures are immediate.
-- Retained data becomes unavailable after the bounded grace period without
-  replacing its last known values with synthesized defaults.
+- Diagnostic camera health expires after the bounded grace period, but retained
+  entity values remain available to Recorder. Only explicit EZVIZ `status == 2`
+  makes camera entities unavailable.
 - Equal snapshots are deduplicated by `DataUpdateCoordinator(always_update=False)`.
 - Diagnostics read the existing redacted snapshot and sanitized health counts;
   they do not perform an additional API request.
+- Runtime logs never include signed image URLs, camera serials, credentials, or
+  raw cloud payloads. Cloud-video cleanup does not block the event loop.
 
 ## Identity constraints
 

@@ -110,8 +110,6 @@ class CloudMpegtsStream:
             with suppress(Exception):
                 process.terminate()
             with suppress(Exception):
-                process.wait(timeout=2)
-            with suppress(Exception):
                 process.kill()
         self._put_queue(None)
 

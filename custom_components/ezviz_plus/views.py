@@ -179,7 +179,7 @@ class CloudStreamView(HomeAssistantView):
         )
         if coordinator is None or serial not in coordinator.data:
             return web.Response(
-                text=f"Unknown EZVIZ camera serial: {serial}",
+                text="Unknown EZVIZ camera",
                 status=HTTPStatus.NOT_FOUND,
             )
         expected_token = self.hass.data.get(DOMAIN, {}).get("_cloud_stream_tokens", {}).get(
@@ -216,8 +216,8 @@ class CloudStreamView(HomeAssistantView):
                 await response.write(chunk)
         except (ConnectionError, ConnectionResetError):
             pass
-        except PyEzvizError as err:
-            _LOGGER.warning("Cloud stream failed for camera %s: %s", serial, err)
+        except PyEzvizError:
+            _LOGGER.warning("Cloud stream failed for a configured camera")
         finally:
             cloud_stream.close()
 
@@ -258,7 +258,7 @@ class SdPlaybackView(HomeAssistantView):
         )
         if coordinator is None or recording.serial not in coordinator.data:
             return web.Response(
-                text=f"Unknown EZVIZ camera serial: {recording.serial}",
+                text="Unknown EZVIZ camera",
                 status=HTTPStatus.NOT_FOUND,
             )
 
@@ -289,8 +289,10 @@ class SdPlaybackView(HomeAssistantView):
                 text="Installed pyEzvizApi does not support SD cloud playback yet",
                 status=HTTPStatus.NOT_IMPLEMENTED,
             )
-        except PyEzvizError as err:
-            _LOGGER.warning("SD playback failed for camera %s: %s", recording.serial, err)
-            return web.Response(text=str(err), status=HTTPStatus.BAD_GATEWAY)
+        except PyEzvizError:
+            _LOGGER.warning("SD playback failed for a configured camera")
+            return web.Response(
+                text="EZVIZ SD playback failed", status=HTTPStatus.BAD_GATEWAY
+            )
 
         return web.Response(body=body, content_type="video/mp4")

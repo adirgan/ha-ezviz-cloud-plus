@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from custom_components.ezviz_plus.cloud_video import (
+    CloudMpegtsStream,
     _ffmpeg_output_codec_args,
     _remux_elementary_video_bytes_to_mpegts,
     _rtp_packets_to_annexb,
@@ -15,6 +16,20 @@ from custom_components.ezviz_plus.cloud_video import (
     _RtpTimestampPacer,
     _select_rtp_video_packets,
 )
+
+
+def test_cloud_stream_close_does_not_wait_for_ffmpeg() -> None:
+    """Avoid blocking Home Assistant's event loop while closing FFmpeg."""
+    process = SimpleNamespace(
+        stdin=SimpleNamespace(close=lambda: None),
+        terminate=lambda: None,
+        wait=lambda **_kwargs: pytest.fail("close must not wait for FFmpeg"),
+        kill=lambda: None,
+    )
+    stream = CloudMpegtsStream(SimpleNamespace(), "CAMERA123")
+    stream._process = process
+
+    stream.close()
 
 
 def _rtp(

@@ -7,6 +7,8 @@ from threading import Event, Lock
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from requests.exceptions import ReadTimeout
+
 from custom_components.ezviz_plus.coordinator import (
     EzvizDataUpdateCoordinator,
     _CameraSnapshotReconciler,
@@ -252,8 +254,8 @@ def test_transient_failure_tracker_resets_after_success() -> None:
     assert not tracker.record_failure()
 
 
-def test_entity_availability_uses_camera_health() -> None:
-    """Expose retained stale data as unavailable after grace expires."""
+def test_entity_availability_retains_last_known_value_during_cloud_failure() -> None:
+    """Keep retained entity values available when only cloud health expires."""
     entity = object.__new__(EzvizEntity)
     entity._serial = "CAMERA_A"
     entity.coordinator = SimpleNamespace(
@@ -261,7 +263,7 @@ def test_entity_availability_uses_camera_health() -> None:
         is_camera_available=lambda serial: False,
     )
 
-    assert not entity.available
+    assert entity.available
 
 
 def test_explicit_offline_status_is_unavailable() -> None:
@@ -426,5 +428,34 @@ def test_second_timeout_rotates_stalled_client() -> None:
         assert coordinator._raw_ezviz_client is new_client
         assert coordinator._load_cameras_task is None
         assert not load_task.cancelled()
+
+    asyncio.run(run_test())
+
+
+def test_requests_timeout_retains_snapshot_without_update_failure() -> None:
+    """Treat requests transport failures as transient cloud failures."""
+
+    async def run_test() -> None:
+        coordinator = object.__new__(EzvizDataUpdateCoordinator)
+        load_task = asyncio.get_running_loop().create_future()
+        load_task.set_exception(ReadTimeout("cloud read timed out"))
+        coordinator._load_cameras_task = load_task
+        coordinator._consecutive_load_timeouts = 0
+        coordinator._api_timeout = 25
+        coordinator.data = _camera_snapshot()
+        coordinator._snapshot_reconciler = _CameraSnapshotReconciler(
+            coordinator.data
+        )
+        coordinator._failure_trackers = {
+            "CAMERA_A": _TransientFailureTracker()
+        }
+        coordinator._unavailable_serials = set()
+        coordinator._availability_changed = False
+        coordinator._data_changed = False
+
+        result = await coordinator._async_update_data()
+
+        assert result == coordinator.data
+        assert coordinator._load_cameras_task is None
 
     asyncio.run(run_test())
