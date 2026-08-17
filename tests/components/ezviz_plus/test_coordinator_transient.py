@@ -317,6 +317,27 @@ def test_shutdown_observes_active_camera_load() -> None:
     asyncio.run(run_test())
 
 
+def test_shutdown_does_not_wait_for_stalled_camera_load() -> None:
+    """Allow Home Assistant to stop while executor work remains blocked."""
+
+    async def run_test() -> None:
+        coordinator = object.__new__(EzvizDataUpdateCoordinator)
+        load_task = asyncio.get_running_loop().create_future()
+        coordinator._load_cameras_task = load_task
+
+        with patch.object(
+            DataUpdateCoordinator, "async_shutdown", new=AsyncMock()
+        ) as base_shutdown:
+            async with asyncio.timeout(0.1):
+                await coordinator.async_shutdown()
+
+        base_shutdown.assert_awaited_once()
+        assert coordinator._load_cameras_task is None
+        assert not load_task.cancelled()
+
+    asyncio.run(run_test())
+
+
 def test_timeout_reuses_and_later_consumes_camera_load() -> None:
     """Do not start another API load while timed-out executor work continues."""
 
@@ -354,5 +375,56 @@ def test_timeout_reuses_and_later_consumes_camera_load() -> None:
         assert result["CAMERA_A"]["battery_level"] == 99
         assert coordinator._load_cameras_task is None
         coordinator.hass.async_add_executor_job.assert_not_called()
+
+    asyncio.run(run_test())
+
+
+def test_second_timeout_rotates_stalled_client() -> None:
+    """Isolate a permanently blocked client after the second timeout."""
+
+    async def run_test() -> None:
+        coordinator = object.__new__(EzvizDataUpdateCoordinator)
+        load_task = asyncio.get_running_loop().create_future()
+        old_client = MagicMock()
+        old_client.export_token.return_value = {
+            "session_id": "session",
+            "rf_session_id": "refresh",
+            "username": "account",
+            "api_url": "api.example.test",
+        }
+        coordinator._raw_ezviz_client = old_client
+        coordinator.ezviz_client = _LockedEzvizClientProxy(old_client)
+        coordinator._load_cameras_task = load_task
+        coordinator._consecutive_load_timeouts = 0
+        coordinator._api_timeout = 0.001
+        coordinator.data = _camera_snapshot()
+        coordinator._snapshot_reconciler = _CameraSnapshotReconciler(
+            coordinator.data
+        )
+        coordinator._failure_trackers = {
+            "CAMERA_A": _TransientFailureTracker()
+        }
+        coordinator._unavailable_serials = set()
+        coordinator._availability_changed = False
+        coordinator._data_changed = False
+        coordinator.hass = SimpleNamespace(async_add_executor_job=MagicMock())
+        new_client = MagicMock()
+
+        with patch(
+            "custom_components.ezviz_plus.coordinator.EzvizClient",
+            return_value=new_client,
+        ) as client_type:
+            await coordinator._async_update_data()
+            assert coordinator._load_cameras_task is load_task
+
+            await coordinator._async_update_data()
+
+        client_type.assert_called_once_with(
+            token=old_client.export_token.return_value,
+            timeout=coordinator._api_timeout,
+        )
+        assert coordinator._raw_ezviz_client is new_client
+        assert coordinator._load_cameras_task is None
+        assert not load_task.cancelled()
 
     asyncio.run(run_test())

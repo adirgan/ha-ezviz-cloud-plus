@@ -30,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 _RAW_CAMERA_KEYS = {"deviceInfos", "resourceInfos"}
 _MAX_TRANSIENT_FAILURES = 2
 _MAX_STALE_SECONDS = 75
+_MAX_CONSECUTIVE_LOAD_TIMEOUTS = 2
 
 
 def _is_raw_camera_key(key: str) -> bool:
@@ -195,6 +196,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         """Initialize global EZVIZ data updater."""
         self._raw_ezviz_client = api
         self.ezviz_client = _LockedEzvizClientProxy(api)
+        self._client_token = api.export_token()
         self._api_timeout = api_timeout
         self._snapshot_reconciler: _CameraSnapshotReconciler | None = None
         self._failure_trackers: dict[str, _TransientFailureTracker] = {}
@@ -202,6 +204,7 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         self._availability_changed = False
         self._data_changed = False
         self._load_cameras_task: asyncio.Future[dict] | None = None
+        self._consecutive_load_timeouts = 0
         update_interval = timedelta(seconds=30)
 
         super().__init__(
@@ -223,6 +226,9 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
                 cameras = await asyncio.shield(self._load_cameras_task)
 
             self._load_cameras_task = None
+            self._consecutive_load_timeouts = 0
+            if raw_client := getattr(self, "_raw_ezviz_client", None):
+                self._client_token = raw_client.export_token()
             return self._process_camera_snapshot(cameras)
 
         except (EzvizAuthTokenExpired, EzvizAuthVerificationCode) as error:
@@ -236,9 +242,40 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Invalid response from API: {error}") from error
 
         except TimeoutError as error:
+            self._consecutive_load_timeouts = (
+                getattr(self, "_consecutive_load_timeouts", 0) + 1
+            )
+            if self._consecutive_load_timeouts >= _MAX_CONSECUTIVE_LOAD_TIMEOUTS:
+                self._rotate_stalled_client()
             if self._retain_after_global_failure():
                 return self.data
             raise UpdateFailed("Timed out fetching EZVIZ data") from error
+
+    @staticmethod
+    def _observe_abandoned_task(task: asyncio.Future[dict]) -> None:
+        """Consume a detached executor task result when it eventually finishes."""
+        if not task.cancelled():
+            task.exception()
+
+    def _detach_load_task(self) -> None:
+        """Detach polling work that cannot be cancelled once in the executor."""
+        if load_task := self._load_cameras_task:
+            if load_task.done():
+                self._observe_abandoned_task(load_task)
+            else:
+                load_task.add_done_callback(self._observe_abandoned_task)
+        self._load_cameras_task = None
+
+    def _rotate_stalled_client(self) -> None:
+        """Isolate a client whose polling request remains blocked."""
+        self._detach_load_task()
+        token = getattr(self, "_client_token", None)
+        if token is None:
+            token = self._raw_ezviz_client.export_token()
+        replacement = EzvizClient(token=token, timeout=self._api_timeout)
+        self._raw_ezviz_client = replacement
+        self.ezviz_client = _LockedEzvizClientProxy(replacement)
+        self._consecutive_load_timeouts = 0
 
     def _process_camera_snapshot(self, cameras: dict) -> dict:
         """Validate camera structure and apply bounded stale-data retention."""
@@ -312,14 +349,8 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
         }
 
     async def async_shutdown(self) -> None:
-        """Observe an active executor load before shutting down."""
-        if load_task := self._load_cameras_task:
-            try:
-                await asyncio.shield(load_task)
-            except Exception:
-                pass
-            finally:
-                self._load_cameras_task = None
+        """Detach active executor work before shutting down."""
+        self._detach_load_task()
         await super().async_shutdown()
 
     def _async_refresh_finished(self) -> None:

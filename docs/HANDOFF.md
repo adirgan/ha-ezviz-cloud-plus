@@ -19,6 +19,11 @@ Last updated: 2026-08-17.
   synchronized them with the reconciler.
 - Preserved timed-out executor work for the next refresh and observe any active
   load during coordinator shutdown.
+- Real Home Assistant validation found that a `load_cameras()` request could
+  remain blocked while holding the serialized-client lock. After two consecutive
+  polling timeouts the coordinator now detaches that work and rotates to a new
+  `EzvizClient` built from the last known token. The abandoned task is observed
+  if it eventually completes, and shutdown never waits indefinitely for it.
 - Removed the additional cloud request from diagnostics and exposed only the
   redacted coordinator snapshot plus sanitized health metadata.
 - Added focused regression coverage in

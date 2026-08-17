@@ -13,6 +13,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   transient `unknown`, `idle`, false, or default work-mode states.
 - Serialized shared API-client access, detached mutable upstream snapshots, and
   reused in-flight polling work after timeout.
+- Recover from a polling request that remains blocked by isolating its client
+  after two consecutive timeouts, allowing later refreshes and commands to use
+  a fresh session instead of waiting indefinitely on the old client lock.
+- Allow integration unload and Home Assistant shutdown to proceed without
+  waiting forever for executor work that Python cannot cancel.
 - Made MQTT and optimistic camera updates copy-on-write and health-aware.
 - Removed the extra cloud request previously made while collecting diagnostics.
 

@@ -14,7 +14,10 @@
 5. The coordinator reconciles raw camera structure per camera. Partial snapshots
    retain the last complete state within a two-failure/75-second grace period;
    changed recovery states require two equal complete snapshots.
-6. `mqtt.py` and optimistic commands publish copy-on-write camera updates and
+6. A timed-out polling Future is reused once to permit normal late completion.
+   If it times out again, the coordinator isolates the blocked client and creates
+   a replacement from the last known token so its lock cannot stall new work.
+7. `mqtt.py` and optimistic commands publish copy-on-write camera updates and
    synchronize the reconciler so polling cannot revert newer local information.
 
 ## Ownership map
