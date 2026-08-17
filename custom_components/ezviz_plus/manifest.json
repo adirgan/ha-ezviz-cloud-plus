@@ -1,15 +1,23 @@
 {
   "domain": "ezviz_plus",
   "name": "EZVIZ Cloud Plus",
-  "codeowners": ["@adirgan"],
+  "codeowners": [
+    "@adirgan"
+  ],
   "config_flow": true,
-  "dependencies": ["ffmpeg", "http"],
+  "dependencies": [
+    "ffmpeg",
+    "http"
+  ],
   "documentation": "https://github.com/adirgan/ha-ezviz-cloud-plus",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/adirgan/ha-ezviz-cloud-plus/issues",
-  "loggers": ["paho_mqtt", "pyezvizapi"],
+  "loggers": [
+    "paho_mqtt",
+    "pyezvizapi"
+  ],
   "requirements": [
     "pyezvizapi@git+https://github.com/adirgan/pyEzvizApi.git@a7710099624008e113269daed0f7f41e3d0b510e"
   ],
-  "version": "0.2.1"
+  "version": "0.2.4"
 }
