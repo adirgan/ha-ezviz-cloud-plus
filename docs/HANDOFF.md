@@ -4,7 +4,7 @@ Last updated: 2026-08-18.
 
 ## Completed
 
-- Synchronized release metadata through `v0.2.8`: `main`, the manifest,
+- Synchronized release metadata through `v0.2.9`: `main`, the manifest,
   README/HACS table, changelog, release tag, and release archive report the
   same version. Release automation now derives
   the next patch from the latest tag, closes `Unreleased`, updates the README
@@ -18,6 +18,15 @@ Last updated: 2026-08-18.
   or `standard` values. Raw sibling branches absent from a partial section are
   retained, and the camera remains diagnostically degraded until full structure
   returns.
+- Added selective two-poll confirmation for semantically suspicious `SWITCH`
+  maps after redacted Home Assistant evidence showed five entities pulsing
+  `on -> off -> on` for exactly one 30-second polling interval. A same-direction
+  transition affecting at least three normalized switches retains the previous
+  raw and normalized switch values on its first poll and publishes only after a
+  second matching poll. A return to baseline discards the candidate without a
+  Home Assistant history transition. One-switch, two-switch, and mixed-direction
+  changes remain immediate, and pending confirmation is exposed only as a
+  sanitized count without camera identifiers or switch values.
 - Serialized all runtime calls to the shared `pyEzvizApi` client through a
   transparent coordinator proxy and deep-copied `load_cameras()` results while
   holding its lock.
@@ -68,7 +77,10 @@ Last updated: 2026-08-18.
   `tests/components/ezviz_plus/test_coordinator_transient.py`, including the
   observed `custom -> partial -> standard -> standard` work-mode sequence,
   useful switch and battery changes inside partial snapshots, and rejection of
-  synthesized alarm defaults when no event timestamp is present.
+  synthesized alarm defaults when no event timestamp is present. Switch
+  confirmation coverage includes both directions, the three-switch threshold,
+  one-poll reversal, repeated confirmation, partial snapshots, raw/normalized
+  coherence, and explicit update precedence.
 
 - Cloned `RenierM26/ha-ezviz` at upstream tag `0.2.0.24`.
 - Renamed integration directory and domain from `ezviz_cloud` to `ezviz_plus`.
@@ -101,6 +113,9 @@ Last updated: 2026-08-18.
 
 - Transient coordinator, diagnostics, and alarm copy-on-write tests pass in the
   repository `.venv` on Python 3.14.6.
+- Switch anomaly regression and diagnostics tests pass: one-poll grouped
+  reversals remain unpublished, persistent grouped changes publish on the
+  second matching poll, and ordinary switch changes remain immediate.
 - Replaying the redacted home-instance evidence through the reconciler retains
   the previous values for the first complete recovery snapshot, publishes both
   fresh camera snapshots on the second while `Seconds_Last_Trigger` advances,

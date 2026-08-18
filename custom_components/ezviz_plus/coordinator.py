@@ -32,6 +32,7 @@ _RAW_CAMERA_KEYS = {"deviceInfos", "resourceInfos"}
 _MAX_TRANSIENT_FAILURES = 2
 _MAX_STALE_SECONDS = 75
 _MAX_CONSECUTIVE_LOAD_TIMEOUTS = 2
+_SWITCH_CONFIRMATION_THRESHOLD = 3
 _RECOVERY_VOLATILE_KEYS = {"Seconds_Last_Trigger", "last_alarm_pic"}
 _PARTIAL_FIELD_SOURCES: dict[str, tuple[tuple[str, ...], ...]] = {
     "Alarm_AdvancedDetect": (("STATUS", "optionals", "Alarm_AdvancedDetect", "type"),),
@@ -138,6 +139,41 @@ def _merge_partial_camera(
     return merged
 
 
+def _normalized_switches(value: Any) -> dict[int, bool] | None:
+    """Return a normalized switch mapping for comparison."""
+    if not isinstance(value, dict):
+        return None
+    normalized: dict[int, bool] = {}
+    for raw_key, raw_value in value.items():
+        try:
+            switch_id = int(raw_key)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(raw_value, (bool, int)):
+            return None
+        normalized[switch_id] = bool(raw_value)
+    return normalized
+
+
+def _is_suspicious_switch_transition(
+    previous: dict[int, bool], current: dict[int, bool]
+) -> bool:
+    """Return whether many switches changed together toward one value."""
+    changed_values = {
+        current[switch_id]
+        for switch_id in previous.keys() & current.keys()
+        if previous[switch_id] != current[switch_id]
+    }
+    changed_count = sum(
+        previous[switch_id] != current[switch_id]
+        for switch_id in previous.keys() & current.keys()
+    )
+    return (
+        changed_count >= _SWITCH_CONFIRMATION_THRESHOLD
+        and len(changed_values) == 1
+    )
+
+
 def _recovery_snapshots_equal(
     first: dict[str, Any], second: dict[str, Any]
 ) -> bool:
@@ -157,6 +193,7 @@ class _CameraSnapshotReconciler:
         self._published = deepcopy(initial)
         self._degraded_serials: set[str] = set()
         self._candidates: dict[str, dict[str, Any]] = {}
+        self._switch_candidates: dict[str, dict[int, bool]] = {}
         self._last_partial_serials: set[str] = set()
 
     @property
@@ -168,6 +205,11 @@ class _CameraSnapshotReconciler:
     def partial_serials(self) -> set[str]:
         """Return cameras that were incomplete in the latest response."""
         return set(self._last_partial_serials)
+
+    @property
+    def switch_confirmation_count(self) -> int:
+        """Return the number of cameras awaiting switch confirmation."""
+        return len(self._switch_candidates)
 
     def _is_complete(self, serial: str, camera: dict[str, Any]) -> bool:
         """Return whether camera retains its previously confirmed raw structure."""
@@ -186,10 +228,40 @@ class _CameraSnapshotReconciler:
 
     def merge_camera_update(self, serial: str, fields: dict[str, Any]) -> None:
         """Apply an immediate push or optimistic update to internal snapshots."""
+        if "switches" in fields or "SWITCH" in fields:
+            self._switch_candidates.pop(serial, None)
         if serial in self._published:
             self._published[serial] = {**self._published[serial], **fields}
         if serial in self._candidates:
             self._candidates[serial] = {**self._candidates[serial], **fields}
+
+    def _reconcile_switches(
+        self,
+        serial: str,
+        previous: dict[str, Any],
+        current: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Confirm suspicious synchronized switch transitions across two polls."""
+        previous_switches = _normalized_switches(previous.get("switches"))
+        current_switches = _normalized_switches(current.get("switches"))
+        if previous_switches is None or current_switches is None:
+            self._switch_candidates.pop(serial, None)
+            return current
+        if not _is_suspicious_switch_transition(
+            previous_switches, current_switches
+        ):
+            self._switch_candidates.pop(serial, None)
+            return current
+        if self._switch_candidates.get(serial) == current_switches:
+            self._switch_candidates.pop(serial, None)
+            return current
+
+        self._switch_candidates[serial] = current_switches
+        retained = deepcopy(current)
+        retained["switches"] = deepcopy(previous["switches"])
+        if "SWITCH" in previous:
+            retained["SWITCH"] = deepcopy(previous["SWITCH"])
+        return retained
 
     def reconcile(self, incoming: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """Return a stable detached snapshot for publication."""
@@ -202,7 +274,10 @@ class _CameraSnapshotReconciler:
                 self._degraded_serials.add(serial)
                 self._candidates.pop(serial, None)
                 if previous := self._published.get(serial):
-                    reconciled[serial] = _merge_partial_camera(previous, camera)
+                    partial_camera = _merge_partial_camera(previous, camera)
+                    reconciled[serial] = self._reconcile_switches(
+                        serial, previous, partial_camera
+                    )
                 continue
 
             detached_camera = deepcopy(camera)
@@ -211,7 +286,12 @@ class _CameraSnapshotReconciler:
                 reconciled[serial] = detached_camera
                 self._degraded_serials.discard(serial)
                 self._candidates.pop(serial, None)
+                self._switch_candidates.pop(serial, None)
                 continue
+            if previous is not None:
+                detached_camera = self._reconcile_switches(
+                    serial, previous, detached_camera
+                )
             if serial not in self._degraded_serials or previous is None:
                 reconciled[serial] = detached_camera
                 continue
@@ -236,6 +316,7 @@ class _CameraSnapshotReconciler:
         self._degraded_serials.update(missing_serials)
         for serial in missing_serials:
             self._candidates.pop(serial, None)
+            self._switch_candidates.pop(serial, None)
 
         self._published = deepcopy(reconciled)
         return reconciled
@@ -451,6 +532,11 @@ class EzvizDataUpdateCoordinator(DataUpdateCoordinator):
             "unavailable_count": len(self._unavailable_serials),
             "degraded": bool(
                 self._snapshot_reconciler and self._snapshot_reconciler.degraded
+            ),
+            "switch_confirmation_count": (
+                self._snapshot_reconciler.switch_confirmation_count
+                if self._snapshot_reconciler
+                else 0
             ),
             "load_in_progress": bool(
                 self._load_cameras_task and not self._load_cameras_task.done()

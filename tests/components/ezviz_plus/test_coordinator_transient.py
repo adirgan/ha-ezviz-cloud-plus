@@ -40,6 +40,24 @@ def _camera_snapshot() -> dict:
     }
 
 
+def _camera_snapshot_with_switches(values: dict[int, bool]) -> dict:
+    """Return a camera snapshot with coherent raw and normalized switches."""
+    snapshot = _camera_snapshot()
+    snapshot["CAMERA_A"].update(
+        {
+            "SWITCH": {
+                switch_id: {
+                    "type": switch_id,
+                    "enable": int(enabled),
+                }
+                for switch_id, enabled in values.items()
+            },
+            "switches": dict(values),
+        }
+    )
+    return snapshot
+
+
 def test_mqtt_merge_is_copy_on_write() -> None:
     """Do not mutate a camera snapshot that was already published."""
     coordinator = object.__new__(EzvizDataUpdateCoordinator)
@@ -169,6 +187,138 @@ def test_partial_camera_publishes_useful_switch_change() -> None:
     assert result["CAMERA_A"]["battery_level"] == 100
     assert result["CAMERA_A"]["battery_camera_work_mode"] == 4
     assert reconciler.degraded
+
+
+def test_single_poll_mass_switch_reversal_is_not_published() -> None:
+    """Suppress a synchronized switch reversal that lasts only one poll."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    transient = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), False))
+
+    during_transient = reconciler.reconcile(transient)
+    after_recovery = reconciler.reconcile(deepcopy(initial))
+
+    assert all(during_transient["CAMERA_A"]["switches"].values())
+    assert all(
+        entry["enable"] == 1
+        for entry in during_transient["CAMERA_A"]["SWITCH"].values()
+    )
+    assert all(after_recovery["CAMERA_A"]["switches"].values())
+    assert reconciler.switch_confirmation_count == 0
+    assert not reconciler.degraded
+
+
+def test_confirmed_mass_switch_change_publishes_on_second_poll() -> None:
+    """Publish a synchronized switch change after two matching polls."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), False))
+
+    first = reconciler.reconcile(changed)
+    second = reconciler.reconcile(deepcopy(changed))
+
+    assert all(first["CAMERA_A"]["switches"].values())
+    assert not any(second["CAMERA_A"]["switches"].values())
+    assert not reconciler.degraded
+
+
+def test_inverse_mass_switch_change_requires_confirmation() -> None:
+    """Apply the same confirmation policy to off-to-on transitions."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), False))
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+
+    first = reconciler.reconcile(changed)
+    second = reconciler.reconcile(deepcopy(changed))
+
+    assert not any(first["CAMERA_A"]["switches"].values())
+    assert all(second["CAMERA_A"]["switches"].values())
+
+
+def test_partial_mass_switch_change_publishes_after_confirmation() -> None:
+    """Confirm useful switch changes even while another raw section is partial."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), False))
+    partial["CAMERA_A"].pop("STATUS")
+    partial["CAMERA_A"]["battery_level"] = -1
+
+    first = reconciler.reconcile(partial)
+    second = reconciler.reconcile(deepcopy(partial))
+
+    assert all(first["CAMERA_A"]["switches"].values())
+    assert not any(second["CAMERA_A"]["switches"].values())
+    assert second["CAMERA_A"]["battery_level"] == 100
+    assert reconciler.degraded
+
+
+def test_explicit_switch_update_clears_pending_confirmation() -> None:
+    """Let an explicit switch update supersede a pending poll candidate."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), False))
+
+    reconciler.reconcile(changed)
+    reconciler.merge_camera_update(
+        "CAMERA_A",
+        {
+            "SWITCH": changed["CAMERA_A"]["SWITCH"],
+            "switches": changed["CAMERA_A"]["switches"],
+        },
+    )
+    result = reconciler.reconcile(deepcopy(changed))
+
+    assert not any(result["CAMERA_A"]["switches"].values())
+    assert reconciler.switch_confirmation_count == 0
+
+
+def test_two_simultaneous_switch_changes_publish_immediately() -> None:
+    """Do not delay a small group of ordinary switch changes."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = deepcopy(initial)
+    for switch_id in (1, 2):
+        changed["CAMERA_A"]["switches"][switch_id] = False
+        changed["CAMERA_A"]["SWITCH"][switch_id]["enable"] = 0
+
+    result = reconciler.reconcile(changed)
+
+    assert result["CAMERA_A"]["switches"][1] is False
+    assert result["CAMERA_A"]["switches"][2] is False
+
+
+def test_three_same_direction_switch_changes_require_confirmation() -> None:
+    """Confirm the minimum suspicious same-direction switch transition."""
+    initial = _camera_snapshot_with_switches(dict.fromkeys(range(1, 6), True))
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = deepcopy(initial)
+    for switch_id in (1, 2, 3):
+        changed["CAMERA_A"]["switches"][switch_id] = False
+        changed["CAMERA_A"]["SWITCH"][switch_id]["enable"] = 0
+
+    first = reconciler.reconcile(changed)
+    second = reconciler.reconcile(deepcopy(changed))
+
+    assert all(first["CAMERA_A"]["switches"].values())
+    assert second["CAMERA_A"]["switches"][1] is False
+    assert second["CAMERA_A"]["switches"][2] is False
+    assert second["CAMERA_A"]["switches"][3] is False
+
+
+def test_mixed_direction_switch_changes_publish_immediately() -> None:
+    """Do not delay multiple switch changes with mixed target values."""
+    initial = _camera_snapshot_with_switches(
+        {1: True, 2: True, 3: False, 4: False, 5: True}
+    )
+    reconciler = _CameraSnapshotReconciler(initial)
+    changed = deepcopy(initial)
+    for switch_id, enabled in {1: False, 2: False, 3: True}.items():
+        changed["CAMERA_A"]["switches"][switch_id] = enabled
+        changed["CAMERA_A"]["SWITCH"][switch_id]["enable"] = int(enabled)
+
+    result = reconciler.reconcile(changed)
+
+    assert result == changed
 
 
 def test_partial_status_publishes_present_battery_without_dropping_work_mode() -> None:

@@ -18,6 +18,7 @@ def test_diagnostics_use_existing_coordinator_snapshot() -> None:
             "camera_count": 1,
             "unavailable_count": 0,
             "degraded": False,
+            "switch_confirmation_count": 0,
             "load_in_progress": False,
         },
         ezviz_client=MagicMock(),

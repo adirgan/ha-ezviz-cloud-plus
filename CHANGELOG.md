@@ -7,6 +7,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Suppressed one-poll synchronized switch reversals affecting three or more
+  switches in the same direction. The coordinator now requires a second
+  matching poll before publishing that grouped transition while isolated,
+  two-switch, and mixed-direction changes remain immediate.
+
 ## [0.2.9] - 2026-08-18
 
 ### Fixed
