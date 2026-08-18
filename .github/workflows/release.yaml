@@ -62,67 +62,9 @@ jobs:
             custom_components/ezviz_plus/manifest.json > manifest.json.tmp
           mv manifest.json.tmp custom_components/ezviz_plus/manifest.json
 
-            release_date="$(date -u +%Y-%m-%d)"
-            python - "$current_version" "$next_version" "$release_date" <<'PY'
-            from pathlib import Path
-            import re
-            import sys
-
-            current_version, next_version, release_date = sys.argv[1:]
-
-            changelog_path = Path("CHANGELOG.md")
-            changelog = changelog_path.read_text()
-            unreleased = "## [Unreleased]\n"
-            if unreleased not in changelog:
-              raise SystemExit("CHANGELOG.md is missing the Unreleased section")
-            unreleased_body = changelog.split(unreleased, 1)[1].split("\n## [", 1)[0]
-            if not unreleased_body.strip():
-              raise SystemExit("CHANGELOG.md Unreleased section is empty")
-            changelog = changelog.replace(
-              unreleased,
-              f"{unreleased}\n## [{next_version}] - {release_date}\n",
-              1,
-            )
-            changelog = re.sub(
-              r"^\[Unreleased\]: .+$",
-              f"[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v{next_version}...HEAD",
-              changelog,
-              flags=re.MULTILINE,
-            )
-            release_link = (
-              f"[{next_version}]: https://github.com/adirgan/ha-ezviz-cloud-plus/"
-              f"compare/v{current_version}...v{next_version}"
-            )
-            changelog = changelog.replace(
-              f"[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v{next_version}...HEAD",
-              f"[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v{next_version}...HEAD\n{release_link}",
-              1,
-            )
-            changelog_path.write_text(changelog)
-
-              release_heading = f"## [{next_version}] - {release_date}\n"
-              release_notes = changelog.split(release_heading, 1)[1].split(
-                "\n## [", 1
-              )[0].strip()
-              if not release_notes:
-                raise SystemExit("Generated release notes are empty")
-              Path("release-notes.md").write_text(
-                f"# EZVIZ Cloud Plus {next_version}\n\n{release_notes}\n"
-              )
-
-            readme_path = Path("README.md")
-            readme = readme_path.read_text()
-            updated_readme, replacements = re.subn(
-              r"^(\| )`\d+\.\d+\.\d+`( \| `\d+\.\d+\.\d+` or newer \| `\d+\.\d+\.\d+` or newer \| Active development \|)$",
-              rf"\g<1>`{next_version}`\g<2>",
-              readme,
-              count=1,
-              flags=re.MULTILINE,
-            )
-            if replacements != 1:
-              raise SystemExit("README.md release table row was not found")
-            readme_path.write_text(updated_readme)
-            PY
+          release_date="$(date -u +%Y-%m-%d)"
+          python .github/scripts/prepare_release.py \
+            "$current_version" "$next_version" "$release_date"
 
           echo "version=$next_version" >> "$GITHUB_OUTPUT"
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
