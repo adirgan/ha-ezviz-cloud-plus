@@ -29,6 +29,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Made camera previews resilient to slow or transient cloud captures with
   bounded retries, a shared background refresh that survives proxy-request
   cancellation, and a battery-conscious five-minute last-valid-image cache.
+- Prevented rotating signed alarm-image URLs from blocking two-snapshot
+  recovery and leaving functional values such as battery level stale until an
+  integration reload.
+- Attached the alarm timestamp to alarm-type sensor state so repeated alarms of
+  the same type are recorded as fresh Home Assistant activity.
 
 ## [0.2.1] - 2026-07-13
 

@@ -176,6 +176,30 @@ def test_recovery_change_requires_two_complete_snapshots() -> None:
     assert not reconciler.degraded
 
 
+def test_recovery_ignores_rotating_signed_alarm_image_url() -> None:
+    """Confirm stable values when only the signed alarm image URL rotates."""
+    initial = _camera_snapshot()
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"]["STATUS"] = {}
+    reconciler.reconcile(partial)
+
+    first_recovery = deepcopy(initial)
+    first_recovery["CAMERA_A"]["battery_level"] = 96
+    first_recovery["CAMERA_A"]["STATUS"]["optionals"]["powerRemaining"] = 96
+    first_recovery["CAMERA_A"]["last_alarm_pic"] = "alarm.jpg?sign=first"
+    second_recovery = deepcopy(first_recovery)
+    second_recovery["CAMERA_A"]["last_alarm_pic"] = "alarm.jpg?sign=second"
+
+    first = reconciler.reconcile(first_recovery)
+    second = reconciler.reconcile(second_recovery)
+
+    assert first["CAMERA_A"]["battery_level"] == 100
+    assert second["CAMERA_A"]["battery_level"] == 96
+    assert second["CAMERA_A"]["last_alarm_pic"] == "alarm.jpg?sign=second"
+    assert not reconciler.degraded
+
+
 def test_work_mode_history_sequence_stays_stable_until_confirmed() -> None:
     """Keep custom through a partial response and one standard candidate."""
     initial = _camera_snapshot()

@@ -17,6 +17,13 @@ Last updated: 2026-08-17.
   `status == 2`.
 - Added two-snapshot confirmation for changed recovery values after degradation,
   while authentication failures and explicit offline status remain immediate.
+- Recovery comparison now ignores the rotating signed `last_alarm_pic` URL.
+  Real Docker polling showed that this URL changed every 30 seconds and could
+  otherwise keep the reconciler degraded indefinitely, retaining a stale 100%
+  battery value until integration reload even though the API reported 96%.
+- Alarm type sensors include `last_alarm_time` as a state attribute so a new
+  alarm is recorded by Home Assistant even when its type name/code matches the
+  previous alarm.
 - Converted MQTT and individual defence optimistic updates to copy-on-write and
   synchronized them with the reconciler.
 - Preserved timed-out executor work for the next refresh and observe any active

@@ -32,6 +32,7 @@ _RAW_CAMERA_KEYS = {"deviceInfos", "resourceInfos"}
 _MAX_TRANSIENT_FAILURES = 2
 _MAX_STALE_SECONDS = 75
 _MAX_CONSECUTIVE_LOAD_TIMEOUTS = 2
+_RECOVERY_VOLATILE_KEYS = {"last_alarm_pic"}
 
 
 def _is_raw_camera_key(key: str) -> bool:
@@ -48,6 +49,17 @@ def _contains_mapping_structure(current: Any, previous: Any) -> bool:
     return all(
         key in current and _contains_mapping_structure(current[key], value)
         for key, value in previous.items()
+    )
+
+
+def _recovery_snapshots_equal(
+    first: dict[str, Any], second: dict[str, Any]
+) -> bool:
+    """Compare recovery snapshots without volatile signed cloud values."""
+    return all(
+        first.get(key) == second.get(key)
+        for key in first.keys() | second.keys()
+        if key not in _RECOVERY_VOLATILE_KEYS
     )
 
 
@@ -117,7 +129,10 @@ class _CameraSnapshotReconciler:
                 self._candidates.pop(serial, None)
                 continue
 
-            if self._candidates.get(serial) == detached_camera:
+            candidate = self._candidates.get(serial)
+            if candidate is not None and _recovery_snapshots_equal(
+                candidate, detached_camera
+            ):
                 reconciled[serial] = detached_camera
                 self._degraded_serials.discard(serial)
                 self._candidates.pop(serial, None)

@@ -233,3 +233,13 @@ class EzvizSensor(EzvizEntity, SensorEntity):
     def native_value(self) -> Any:
         """Return the sensor's value from the coordinator snapshot."""
         return self.entity_description.value_fn(self.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Attach alarm identity so repeated alarm types still update HA."""
+        if self.entity_description.key not in {
+            "last_alarm_type_code",
+            "last_alarm_type_name",
+        }:
+            return None
+        return {"last_alarm_time": self.data.get("last_alarm_time")}
