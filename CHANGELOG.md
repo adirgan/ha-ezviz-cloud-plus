@@ -7,6 +7,15 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevented elapsed trigger counters and intermittent optional `FEATURE_INFO`
+  leaves from blocking two-snapshot recovery and retaining stale camera state
+  until an integration reload.
+- Reconciled partial camera responses field by field so useful changes backed by
+  present raw sections are published immediately, while only values whose raw
+  source is missing retain their last confirmed state.
+
 ## [0.2.8] - 2026-08-18
 
 ### Changed

@@ -1,19 +1,23 @@
 # Current Handoff
 
-Last updated: 2026-08-17.
+Last updated: 2026-08-18.
 
 ## Completed
 
-- Synchronized release metadata after `v0.2.7`: `main` now reports version
-  `0.2.7` in the manifest and README/HACS table, and the changelog closes the
-  released fixes under a dated `0.2.7` section. Release automation now derives
+- Synchronized release metadata through `v0.2.8`: `main`, the manifest,
+  README/HACS table, changelog, release tag, and release archive report the
+  same version. Release automation now derives
   the next patch from the latest tag, closes `Unreleased`, updates the README
   release row, commits those files back to `main`, tags that commit, and skips
   recursive release runs for its own metadata commit.
 - Stabilized the full coordinator state machine against synchronized partial
-  EZVIZ responses observed across two cameras. Missing raw structure now retains
-  each camera's last complete snapshot instead of publishing synthesized
-  `unknown`, `idle`, `False`, or `standard` values.
+  EZVIZ responses observed across two cameras. Partial responses are reconciled
+  field by field: values backed by a raw path present in the current poll are
+  published, while fields whose source path is absent retain their last
+  confirmed value instead of publishing synthesized `unknown`, `idle`, `False`,
+  or `standard` values. Raw sibling branches absent from a partial section are
+  retained, and the camera remains diagnostically degraded until full structure
+  returns.
 - Serialized all runtime calls to the shared `pyEzvizApi` client through a
   transparent coordinator proxy and deep-copied `load_cameras()` results while
   holding its lock.
@@ -27,6 +31,12 @@ Last updated: 2026-08-17.
   Real Docker polling showed that this URL changed every 30 seconds and could
   otherwise keep the reconciler degraded indefinitely, retaining a stale 100%
   battery value until integration reload even though the API reported 96%.
+- Recovery comparison also ignores `Seconds_Last_Trigger`, an elapsed-time
+  counter observed changing between complete polls. Structural completeness
+  still requires raw state sections such as `STATUS`, but no longer requires
+  every optional leaf previously seen inside `FEATURE_INFO`; a disappearing
+  `RecordStorage.RecordMode.recordMode` leaf was observed keeping one camera
+  degraded indefinitely despite successful polling.
 - Alarm type sensors include `last_alarm_time` as a state attribute so a new
   alarm is recorded by Home Assistant even when its type name/code matches the
   previous alarm.
@@ -56,7 +66,9 @@ Last updated: 2026-08-17.
   cancels outstanding work when the entity is removed.
 - Added focused regression coverage in
   `tests/components/ezviz_plus/test_coordinator_transient.py`, including the
-  observed `custom -> partial -> standard -> standard` work-mode sequence.
+  observed `custom -> partial -> standard -> standard` work-mode sequence,
+  useful switch and battery changes inside partial snapshots, and rejection of
+  synthesized alarm defaults when no event timestamp is present.
 
 - Cloned `RenierM26/ha-ezviz` at upstream tag `0.2.0.24`.
 - Renamed integration directory and domain from `ezviz_cloud` to `ezviz_plus`.
@@ -89,6 +101,10 @@ Last updated: 2026-08-17.
 
 - Transient coordinator, diagnostics, and alarm copy-on-write tests pass in the
   repository `.venv` on Python 3.14.6.
+- Replaying the redacted home-instance evidence through the reconciler retains
+  the previous values for the first complete recovery snapshot, publishes both
+  fresh camera snapshots on the second while `Seconds_Last_Trigger` advances,
+  and exits degradation with zero partial cameras.
 - A controlled Docker outage redirected only the EZVIZ API host while leaving
   Home Assistant reachable. Three failure cycles plus a concurrent coordinator
   and account-alarm refresh retained both battery values at `100`, work modes at

@@ -123,8 +123,8 @@ def test_client_proxy_copies_camera_snapshot_under_lock() -> None:
     assert snapshot["CAMERA_A"]["STATUS"]["globalStatus"] == 1
 
 
-def test_partial_camera_keeps_last_complete_snapshot() -> None:
-    """Do not expose synthesized defaults when raw camera data disappears."""
+def test_partial_camera_retains_fields_with_missing_sources() -> None:
+    """Do not expose synthesized defaults when their raw sources disappear."""
     initial = _camera_snapshot()
     reconciler = _CameraSnapshotReconciler(initial)
     partial = deepcopy(initial)
@@ -137,6 +137,91 @@ def test_partial_camera_keeps_last_complete_snapshot() -> None:
 
     assert result == initial
     assert reconciler.degraded
+
+
+def test_partial_camera_publishes_useful_switch_change() -> None:
+    """Publish a sourced switch change while retaining missing status fields."""
+    initial = _camera_snapshot()
+    initial["CAMERA_A"].update(
+        {
+            "SWITCH": {1: {"type": 1, "enable": 1}},
+            "switches": {1: True},
+        }
+    )
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"].update(
+        {
+            "STATUS": {},
+            "SWITCH": {1: {"type": 1, "enable": 0}},
+            "switches": {1: False},
+            "alarm_notify": False,
+            "battery_level": None,
+            "battery_camera_work_mode": -1,
+        }
+    )
+
+    result = reconciler.reconcile(partial)
+
+    assert result["CAMERA_A"]["switches"] == {1: False}
+    assert result["CAMERA_A"]["SWITCH"][1]["enable"] == 0
+    assert result["CAMERA_A"]["alarm_notify"] is True
+    assert result["CAMERA_A"]["battery_level"] == 100
+    assert result["CAMERA_A"]["battery_camera_work_mode"] == 4
+    assert reconciler.degraded
+
+
+def test_partial_status_publishes_present_battery_without_dropping_work_mode() -> None:
+    """Publish a present status leaf while retaining absent sibling state."""
+    initial = _camera_snapshot()
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"].update(
+        {
+            "STATUS": {"optionals": {"powerRemaining": 98}},
+            "battery_level": 98,
+            "battery_camera_work_mode": -1,
+        }
+    )
+
+    result = reconciler.reconcile(partial)
+
+    assert result["CAMERA_A"]["battery_level"] == 98
+    assert result["CAMERA_A"]["STATUS"]["optionals"]["powerRemaining"] == 98
+    assert result["CAMERA_A"]["battery_camera_work_mode"] == 4
+    assert result["CAMERA_A"]["STATUS"]["optionals"]["batteryCameraWorkMode"] == 4
+    assert reconciler.degraded
+
+
+def test_partial_camera_rejects_synthesized_alarm_defaults() -> None:
+    """Retain the confirmed alarm when a partial poll has no alarm timestamp."""
+    initial = _camera_snapshot()
+    initial["CAMERA_A"].update(
+        {
+            "last_alarm_time": "2026-08-18 12:00:00",
+            "last_alarm_pic": "alarm.jpg",
+            "last_alarm_type_code": "2403",
+            "last_alarm_type_name": "Person",
+        }
+    )
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"].update(
+        {
+            "STATUS": {},
+            "last_alarm_time": None,
+            "last_alarm_pic": "default-logo.jpg",
+            "last_alarm_type_code": "0000",
+            "last_alarm_type_name": "NoAlarm",
+        }
+    )
+
+    result = reconciler.reconcile(partial)
+
+    assert result["CAMERA_A"]["last_alarm_time"] == "2026-08-18 12:00:00"
+    assert result["CAMERA_A"]["last_alarm_pic"] == "alarm.jpg"
+    assert result["CAMERA_A"]["last_alarm_type_code"] == "2403"
+    assert result["CAMERA_A"]["last_alarm_type_name"] == "Person"
 
 
 def test_healthy_camera_updates_while_other_camera_is_partial() -> None:
@@ -197,6 +282,75 @@ def test_recovery_ignores_rotating_signed_alarm_image_url() -> None:
     assert first["CAMERA_A"]["battery_level"] == 100
     assert second["CAMERA_A"]["battery_level"] == 96
     assert second["CAMERA_A"]["last_alarm_pic"] == "alarm.jpg?sign=second"
+    assert not reconciler.degraded
+
+
+def test_recovery_ignores_elapsed_trigger_counter() -> None:
+    """Confirm functional changes while the trigger-age counter advances."""
+    initial = _camera_snapshot()
+    initial["CAMERA_A"].update(
+        {
+            "Seconds_Last_Trigger": 3600,
+            "battery_charge_state": "not_charging",
+            "wifi_signal": 38,
+        }
+    )
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"]["STATUS"] = {}
+    reconciler.reconcile(partial)
+
+    first_recovery = deepcopy(initial)
+    first_recovery["CAMERA_A"].update(
+        {
+            "Seconds_Last_Trigger": 3630,
+            "battery_level": 98,
+            "battery_charge_state": "charging",
+            "wifi_signal": 30,
+        }
+    )
+    first_recovery["CAMERA_A"]["STATUS"]["optionals"]["powerRemaining"] = 98
+    second_recovery = deepcopy(first_recovery)
+    second_recovery["CAMERA_A"]["Seconds_Last_Trigger"] = 3660
+
+    first = reconciler.reconcile(first_recovery)
+    second = reconciler.reconcile(second_recovery)
+
+    assert first["CAMERA_A"]["battery_level"] == 100
+    assert second["CAMERA_A"]["battery_level"] == 98
+    assert second["CAMERA_A"]["battery_charge_state"] == "charging"
+    assert second["CAMERA_A"]["wifi_signal"] == 30
+    assert second["CAMERA_A"]["Seconds_Last_Trigger"] == 3660
+    assert not reconciler.degraded
+
+
+def test_recovery_allows_optional_feature_info_leaf_to_disappear() -> None:
+    """Do not stay degraded when an optional capability leaf disappears."""
+    initial = _camera_snapshot()
+    initial["CAMERA_A"]["FEATURE_INFO"] = {
+        "1": {
+            "Video": {
+                "RecordStorage": {"RecordMode": {"recordMode": "event"}}
+            }
+        }
+    }
+    reconciler = _CameraSnapshotReconciler(initial)
+    partial = deepcopy(initial)
+    partial["CAMERA_A"]["STATUS"] = {}
+    reconciler.reconcile(partial)
+
+    recovered = deepcopy(initial)
+    recovered["CAMERA_A"]["battery_level"] = 98
+    recovered["CAMERA_A"]["STATUS"]["optionals"]["powerRemaining"] = 98
+    recovered["CAMERA_A"]["FEATURE_INFO"]["1"]["Video"]["RecordStorage"][
+        "RecordMode"
+    ] = {}
+
+    first = reconciler.reconcile(recovered)
+    second = reconciler.reconcile(deepcopy(recovered))
+
+    assert first["CAMERA_A"]["battery_level"] == 100
+    assert second["CAMERA_A"]["battery_level"] == 98
     assert not reconciler.degraded
 
 

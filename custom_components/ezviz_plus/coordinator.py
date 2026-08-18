@@ -32,7 +32,53 @@ _RAW_CAMERA_KEYS = {"deviceInfos", "resourceInfos"}
 _MAX_TRANSIENT_FAILURES = 2
 _MAX_STALE_SECONDS = 75
 _MAX_CONSECUTIVE_LOAD_TIMEOUTS = 2
-_RECOVERY_VOLATILE_KEYS = {"last_alarm_pic"}
+_RECOVERY_VOLATILE_KEYS = {"Seconds_Last_Trigger", "last_alarm_pic"}
+_PARTIAL_FIELD_SOURCES: dict[str, tuple[tuple[str, ...], ...]] = {
+    "Alarm_AdvancedDetect": (("STATUS", "optionals", "Alarm_AdvancedDetect", "type"),),
+    "Alarm_DetectHumanCar": (("STATUS", "optionals", "Alarm_DetectHumanCar", "type"),),
+    "NightVision_Model": (("STATUS", "optionals", "NightVision_Model"),),
+    "PIR_Status": (("STATUS", "pirStatus"),),
+    "alarm_light_luminance": (("STATUS", "optionals", "Alarm_Light", "luminance"),),
+    "alarm_notify": (("STATUS", "globalStatus"),),
+    "alarm_schedules_enabled": (("TIME_PLAN",),),
+    "alarm_sound_mod": (("STATUS", "alarmSoundMode"),),
+    "battery_camera_work_mode": (("STATUS", "optionals", "batteryCameraWorkMode"),),
+    "battery_level": (("STATUS", "optionals", "powerRemaining"),),
+    "cam_timezone": (("STATUS", "optionals", "timeZone"),),
+    "device_category": (("deviceInfos", "deviceCategory"),),
+    "device_sub_category": (("deviceInfos", "deviceSubCategory"),),
+    "diskCapacity": (("STATUS", "optionals", "diskCapacity"),),
+    "encrypted": (("STATUS", "isEncrypt"),),
+    "encrypted_pwd_hash": (("STATUS", "encryptPwd"),),
+    "latest_firmware_info": (("UPGRADE", "upgradePackageInfo"),),
+    "local_ip": (("WIFI", "address"), ("CONNECTION", "localIp")),
+    "local_rtsp_port": (("CONNECTION", "localRtspPort"),),
+    "mac_address": (("deviceInfos", "mac"),),
+    "name": (("deviceInfos", "name"),),
+    "offline_notify": (("deviceInfos", "offlineNotify"),),
+    "last_offline_time": (("deviceInfos", "offlineTime"),),
+    "optionals": (("STATUS", "optionals"),),
+    "push_notify_alarm": (("NODISTURB", "alarmEnable"),),
+    "push_notify_call": (("NODISTURB", "callingEnable"),),
+    "resouceid": (("resourceInfos",),),
+    "status": (("deviceInfos", "status"),),
+    "supportExt": (("deviceInfos", "supportExt"),),
+    "supported_channels": (("deviceInfos", "channelNumber"),),
+    "switches": (("SWITCH",),),
+    "upgrade_available": (("UPGRADE", "isNeedUpgrade"),),
+    "upgrade_in_progress": (("STATUS", "upgradeStatus"),),
+    "upgrade_percent": (("STATUS", "upgradeProcess"),),
+    "version": (("deviceInfos", "version"),),
+    "wan_ip": (("CONNECTION", "netIp"),),
+}
+_PARTIAL_EVENT_KEYS = {
+    "Motion_Trigger",
+    "Seconds_Last_Trigger",
+    "last_alarm_pic",
+    "last_alarm_time",
+    "last_alarm_type_code",
+    "last_alarm_type_name",
+}
 
 
 def _is_raw_camera_key(key: str) -> bool:
@@ -50,6 +96,46 @@ def _contains_mapping_structure(current: Any, previous: Any) -> bool:
         key in current and _contains_mapping_structure(current[key], value)
         for key, value in previous.items()
     )
+
+
+def _has_path(value: dict[str, Any], path: tuple[str, ...]) -> bool:
+    """Return whether a nested source path is present in a camera snapshot."""
+    current: Any = value
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def _merge_present_structure(previous: Any, current: Any) -> Any:
+    """Overlay present mapping values without dropping absent sibling fields."""
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return deepcopy(current)
+    merged = deepcopy(previous)
+    for key, value in current.items():
+        merged[key] = _merge_present_structure(previous.get(key), value)
+    return merged
+
+
+def _merge_partial_camera(
+    previous: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any]:
+    """Publish useful partial fields while retaining values with absent sources."""
+    merged = deepcopy(previous)
+    has_alarm_event = current.get("last_alarm_time") not in (None, "")
+    for key, value in current.items():
+        if _is_raw_camera_key(key):
+            merged[key] = _merge_present_structure(previous.get(key), value)
+        elif (
+            (key in _PARTIAL_EVENT_KEYS and has_alarm_event)
+            or any(
+                _has_path(current, path)
+                for path in _PARTIAL_FIELD_SOURCES.get(key, ())
+            )
+        ):
+            merged[key] = deepcopy(value)
+    return merged
 
 
 def _recovery_snapshots_equal(
@@ -89,7 +175,11 @@ class _CameraSnapshotReconciler:
         if previous is None:
             return bool(camera.get("name")) and "status" in camera
         return all(
-            key in camera and _contains_mapping_structure(camera[key], value)
+            key in camera
+            and (
+                key == "FEATURE_INFO"
+                or _contains_mapping_structure(camera[key], value)
+            )
             for key, value in previous.items()
             if _is_raw_camera_key(key)
         )
@@ -111,6 +201,8 @@ class _CameraSnapshotReconciler:
                 self._last_partial_serials.add(serial)
                 self._degraded_serials.add(serial)
                 self._candidates.pop(serial, None)
+                if previous := self._published.get(serial):
+                    reconciled[serial] = _merge_partial_camera(previous, camera)
                 continue
 
             detached_camera = deepcopy(camera)
