@@ -24,7 +24,7 @@ integrations.
 
 | Release | Home Assistant      | HACS             | Status             |
 | :------ | :------------------ | :--------------- | :----------------- |
-| `0.2.8` | `2026.7.2` or newer | `1.6.0` or newer | Active development |
+| `0.2.9` | `2026.7.2` or newer | `1.6.0` or newer | Active development |
 
 ## Features
 

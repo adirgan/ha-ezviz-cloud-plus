@@ -7,6 +7,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.9] - 2026-08-18
+
 ### Fixed
 
 - Prevented elapsed trigger counters and intermittent optional `FEATURE_INFO`
@@ -136,7 +138,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Separate `ezviz_plus` domain, config-entry migration, cloud polling, MQTT
   events, local RTSP configuration, and capability-gated camera entities.
 
-[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.8...HEAD
+[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.5...v0.2.6
