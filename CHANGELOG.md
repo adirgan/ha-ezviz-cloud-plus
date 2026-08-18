@@ -7,21 +7,25 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Synchronized release automation and agent instructions so manifest, changelog,
+  README/HACS metadata, release tags, and archives report the same version.
+
+## [0.2.7] - 2026-08-17
+
 ### Fixed
 
-- Prevented partial EZVIZ camera responses from publishing synchronized
-  transient `unknown`, `idle`, false, or default work-mode states.
-- Serialized shared API-client access, detached mutable upstream snapshots, and
-  reused in-flight polling work after timeout.
-- Recover from a polling request that remains blocked by isolating its client
-  after two consecutive timeouts, allowing later refreshes and commands to use
-  a fresh session instead of waiting indefinitely on the old client lock.
-- Allow integration unload and Home Assistant shutdown to proceed without
-  waiting forever for executor work that Python cannot cancel.
-- Made MQTT and optimistic camera updates copy-on-write and health-aware.
-- Removed the extra cloud request previously made while collecting diagnostics.
-- Retained published entity values and Recorder continuity during transient
-  cloud-health expiry; explicit EZVIZ offline status remains immediate.
+- Prevented rotating signed alarm-image URLs from blocking two-snapshot
+  recovery and leaving functional values such as battery level stale until an
+  integration reload.
+- Attached the alarm timestamp to alarm-type sensor state so repeated alarms of
+  the same type are recorded as fresh Home Assistant activity.
+
+## [0.2.6] - 2026-08-17
+
+### Fixed
+
 - Handled raw `requests` transport failures without noisy Home Assistant update
   errors and bounded account-alarm polling below the slow-update threshold.
 - Removed signed image URLs, camera serials, and raw cloud failure details from
@@ -29,11 +33,41 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Made camera previews resilient to slow or transient cloud captures with
   bounded retries, a shared background refresh that survives proxy-request
   cancellation, and a battery-conscious five-minute last-valid-image cache.
-- Prevented rotating signed alarm-image URLs from blocking two-snapshot
-  recovery and leaving functional values such as battery level stale until an
-  integration reload.
-- Attached the alarm timestamp to alarm-type sensor state so repeated alarms of
-  the same type are recorded as fresh Home Assistant activity.
+
+## [0.2.5] - 2026-08-17
+
+### Fixed
+
+- Recovered from polling requests that remain blocked by isolating the stalled
+  client after two consecutive timeouts, allowing later refreshes and commands
+  to use a fresh session instead of waiting indefinitely on the old lock.
+- Allowed integration unload and Home Assistant shutdown to proceed without
+  waiting forever for executor work that Python cannot cancel.
+
+## [0.2.4] - 2026-08-17
+
+### Fixed
+
+- Prevented partial EZVIZ camera responses from publishing synchronized
+  transient `unknown`, `idle`, false, or default work-mode states.
+- Serialized shared API-client access, detached mutable upstream snapshots, and
+  reused in-flight polling work after timeout.
+- Made MQTT and optimistic camera updates copy-on-write and health-aware.
+- Removed the extra cloud request previously made while collecting diagnostics.
+- Retained published entity values and Recorder continuity during transient
+  cloud-health expiry; explicit EZVIZ offline status remains immediate.
+
+## [0.2.3] - 2026-08-17
+
+### Changed
+
+- Updated the GitHub Actions Python setup action from version 6 to version 7.
+
+## [0.2.2] - 2026-07-13
+
+### Changed
+
+- Enabled automatic patch releases for every validated push to `main`.
 
 ## [0.2.1] - 2026-07-13
 
@@ -91,7 +125,13 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Separate `ezviz_plus` domain, config-entry migration, cloud polling, MQTT
   events, local RTSP configuration, and capability-gated camera entities.
 
-[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.6...v0.2.7
+[0.2.6]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.5...v0.2.6
+[0.2.5]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.4...v0.2.5
+[0.2.4]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adirgan/ha-ezviz-cloud-plus/compare/bb8ccd7...v0.2.0
 [0.1.0]: https://github.com/adirgan/ha-ezviz-cloud-plus/tree/bb8ccd7

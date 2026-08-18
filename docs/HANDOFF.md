@@ -4,6 +4,12 @@ Last updated: 2026-08-17.
 
 ## Completed
 
+- Synchronized release metadata after `v0.2.7`: `main` now reports version
+  `0.2.7` in the manifest and README/HACS table, and the changelog closes the
+  released fixes under a dated `0.2.7` section. Release automation now derives
+  the next patch from the latest tag, closes `Unreleased`, updates the README
+  release row, commits those files back to `main`, tags that commit, and skips
+  recursive release runs for its own metadata commit.
 - Stabilized the full coordinator state machine against synchronized partial
   EZVIZ responses observed across two cameras. Missing raw structure now retains
   each camera's last complete snapshot instead of publishing synthesized

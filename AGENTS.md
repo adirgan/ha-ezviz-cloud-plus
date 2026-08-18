@@ -69,6 +69,25 @@ Use the repository `.venv` or the devcontainer for Python commands. The existing
 listener virtualenv does not include Home Assistant. See
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for Docker and VS Code workflows.
 
+## Release metadata invariants
+
+- Every user-visible behavior change must update `CHANGELOG.md` under
+  `Unreleased` and update `docs/HANDOFF.md` with the verified current behavior.
+- Update `README.md` whenever installation, compatibility, features, entities,
+  configuration, troubleshooting, or other text rendered by HACS changes.
+- Before any requested publish, verify that `manifest.json`, the README release
+  table, the latest changelog section, the GitHub release tag/title, and the
+  `ezviz_plus.zip` manifest all report the same version.
+- Do not leave released changes under `Unreleased`. The release workflow closes
+  that section using the generated version/date and creates a fresh empty
+  `Unreleased` section.
+- HACS uses the README and integration files from the GitHub release archive,
+  not merely the default branch. After publishing, inspect the latest release
+  and archive metadata instead of assuming a successful push is sufficient.
+- A publication is incomplete until CI, HACS, hassfest, the GitHub release, the
+  changelog, README/HACS metadata, manifest version, and release ZIP have all
+  been checked and shown to represent the same released state.
+
 ## Source-of-truth docs
 
 - Architecture and ownership: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
